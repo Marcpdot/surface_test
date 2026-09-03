@@ -1,13 +1,20 @@
+import logging
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizeGrip,
     QVBoxLayout,
     QWidget,
 )
+
+from surface.dispatcher import Dispatcher, DispatchResult
+from surface.protocol import Command, ProtocolError, TextCommand
+from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
 _DEFAULT_SIZE = (960, 720)
@@ -60,13 +67,69 @@ class SurfaceWindow(QWidget):
         self.setStyleSheet("background-color: #F5F5F5;")
         self._centered = False
 
+        self._workspace = Workspace(self)
+        self._dispatcher = Dispatcher(self._workspace)
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         root.addWidget(_TitleBar(self))
-        root.addWidget(QWidget(self), 1)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self._workspace)
+        root.addWidget(scroll, 1)
+
+        self._status = QLabel(self)
+        font = self._status.font()
+        font.setPointSize(11)
+        self._status.setFont(font)
+        root.addWidget(self._status)
 
         self._size_grip = QSizeGrip(self)
+
+    def run_demo(self) -> None:
+        try:
+            self.apply_commands(
+                [
+                    TextCommand(
+                        type="text",
+                        id="demo-text",
+                        content="## Surface demo",
+                        format="markdown",
+                    )
+                ]
+            )
+        except Exception as exc:
+            self._set_internal_error(exc)
+
+    def apply_commands(self, commands: list[Command]) -> None:
+        try:
+            results = self._dispatcher.dispatch_many(commands)
+            self._set_status_from_results(results)
+        except Exception as exc:
+            self._set_internal_error(exc)
+
+    def _set_status_error(self, exc: ProtocolError) -> None:
+        self._status.setText(f"{exc.code}: {exc.message}")
+        logging.getLogger("surface").warning("%s %s", exc.code, exc.command_id)
+
+    def _set_internal_error(self, exc: BaseException) -> None:
+        logging.getLogger("surface").exception("internal_error")
+        self._status.setText(f"internal_error: {type(exc).__name__}")
+
+    def _set_status_from_results(self, results: list[DispatchResult]) -> None:
+        if not results:
+            return
+        first_err = next((r for r in results if not r.ok), None)
+        if first_err is not None:
+            self._status.setText(f"{first_err.error_code}: {first_err.error_message}")
+            return
+        if len(results) == 1:
+            r = results[0]
+            self._status.setText(f"{r.action} {r.command_id} ({r.command_type})")
+            return
+        self._status.setText(f"{len(results)} ok")
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)

@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 
 
@@ -13,20 +14,21 @@ def run(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(prog="surface", exit_on_error=False)
+    parser.add_argument("--demo", action="store_true")
     try:
-        _, unknown = parser.parse_known_args(argv)
+        args = parser.parse_args(argv)
     except argparse.ArgumentError as exc:
         parser.print_usage(sys.stderr)
         sys.stderr.write(f"{parser.prog}: error: {exc}\n")
         return 2
     except SystemExit as exc:
         return 0 if exc.code in (0, None) else 2
-    if unknown:
-        parser.print_usage(sys.stderr)
-        sys.stderr.write(
-            f"{parser.prog}: error: unrecognized arguments: {' '.join(unknown)}\n"
-        )
-        return 2
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
 
     import os
     os.environ.setdefault("QT_API", "PySide6")
@@ -38,6 +40,8 @@ def run(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv)
     win = SurfaceWindow()
     win.show()
+    if args.demo:
+        win.run_demo()
     return app.exec()
 
 

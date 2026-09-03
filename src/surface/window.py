@@ -104,6 +104,7 @@ class SurfaceWindow(QWidget):
         root.addWidget(scroll, 1)
 
         self._status = QLabel(self)
+        self._status.setTextFormat(Qt.PlainText)
         font = self._status.font()
         font.setPointSize(11)
         self._status.setFont(font)

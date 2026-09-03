@@ -36,6 +36,7 @@ class EquationBlock(Block):
 
         self._source = QPixmap()
         self._label = QLabel(self)
+        self._label.setTextFormat(Qt.PlainText)
         self._label.setSizePolicy(policy)
 
         layout = QVBoxLayout(self)

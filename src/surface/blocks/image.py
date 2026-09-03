@@ -64,8 +64,12 @@ class ImageBlock(Block):
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
-        if not self._source_pixmap.isNull():
-            self._label.setPixmap(self._scaled(self._source_pixmap))
+        if self._source_pixmap.isNull():
+            return
+        fitted = self._scaled(self._source_pixmap)
+        current = self._label.pixmap()
+        if current is None or current.isNull() or current.size() != fitted.size():
+            self._label.setPixmap(fitted)
             self.updateGeometry()
 
     def _scaled(self, pixmap: QPixmap) -> QPixmap:

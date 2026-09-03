@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from surface.protocol import Command, ProtocolError, TextCommand, parse_command_list
+from surface.protocol import Command, ProtocolError, parse_command, parse_command_list
 
 
 class HermesBridge:
@@ -24,13 +24,20 @@ class HermesBridge:
 
         Stripped text starting with '{' or '[' → from_hermes_output
         (text_id is ignored; commands carry their own ids).
-        Otherwise → [TextCommand(type="text", id=text_id, content=text.strip(), format="markdown")].
+        Otherwise → parse_command as a text command (same limits as protocol).
         """
         stripped = text.strip()
         if stripped.startswith("{") or stripped.startswith("["):
             return self.from_hermes_output(stripped)
         return [
-            TextCommand(type="text", id=text_id, content=stripped, format="markdown")
+            parse_command(
+                {
+                    "type": "text",
+                    "id": text_id,
+                    "content": stripped,
+                    "format": "markdown",
+                }
+            )
         ]
 
     @staticmethod

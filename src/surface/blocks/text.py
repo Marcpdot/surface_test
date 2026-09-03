@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from math import ceil
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QUrl
 from PySide6.QtGui import QResizeEvent, QTextDocument
 from PySide6.QtWidgets import QSizePolicy, QTextBrowser, QVBoxLayout, QWidget
 
@@ -10,12 +10,19 @@ from surface.blocks.base import Block
 from surface.protocol import Command, TextCommand
 
 
+class _MarkdownView(QTextBrowser):
+    def loadResource(self, resource_type: int, name: QUrl) -> object:
+        # Images are ImageBlock; markdown must not fetch http/file/UNC.
+        return None
+
+
 class TextBlock(Block):
     def __init__(self, command_id: str, parent: QWidget | None = None) -> None:
         super().__init__(command_id, parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        self._last_height = -1
 
-        self._browser = QTextBrowser(self)
+        self._browser = _MarkdownView(self)
         self._browser.setReadOnly(True)
         self._browser.setOpenLinks(False)
         self._browser.setOpenExternalLinks(False)
@@ -64,11 +71,14 @@ class TextBlock(Block):
         self._sync_document_width()
 
     def _on_document_size_changed(self, _size: object = None) -> None:
-        self.updateGeometry()
+        height = self._document_height()
+        if height != self._last_height:
+            self._last_height = height
+            self.updateGeometry()
 
     def _sync_document_width(self) -> None:
         width = self._browser.viewport().width()
-        if width > 0:
+        if width > 0 and abs(self._browser.document().textWidth() - width) >= 1:
             self._browser.document().setTextWidth(width)
 
     def _document_height(self) -> int:

@@ -6,6 +6,7 @@ import pytest
 from surface.hermes_bridge import HermesBridge
 from surface.image_source import interpret_image_source, resolve_image_file
 from surface.protocol import (
+    MAX_TEXT_LENGTH,
     EquationCommand,
     ImageCommand,
     PlotCommand,
@@ -553,6 +554,18 @@ def test_from_user_input_wraps_prose_as_text_command() -> None:
     assert commands == [
         TextCommand(type="text", id="user-1", content="notat", format="markdown")
     ]
+
+
+def test_from_user_input_prose_uses_protocol_limits() -> None:
+    with pytest.raises(ProtocolError) as exc_info:
+        HermesBridge().from_user_input("x" * (MAX_TEXT_LENGTH + 1), text_id="user-1")
+    assert exc_info.value.code == "limit_exceeded"
+
+
+def test_from_user_input_empty_prose_rejected() -> None:
+    with pytest.raises(ProtocolError) as exc_info:
+        HermesBridge().from_user_input("   ", text_id="user-1")
+    assert exc_info.value.code == "empty_field"
 
 
 def test_from_user_input_json_ignores_text_id() -> None:

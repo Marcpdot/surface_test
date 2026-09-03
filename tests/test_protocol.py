@@ -1,7 +1,9 @@
 import json
+from pathlib import Path
 
 import pytest
 
+from surface.image_source import interpret_image_source, resolve_image_file
 from surface.protocol import (
     EquationCommand,
     ImageCommand,
@@ -471,3 +473,52 @@ def test_plain_format_and_inline_display() -> None:
         {"type": "equation", "id": "eq-1", "latex": "a", "display": "inline"}
     )
     assert equation.display == "inline"
+
+
+def _block_path_io(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(self: Path, *args: object, **kwargs: object) -> None:
+        raise AssertionError("image source interpretation must not touch the filesystem")
+
+    monkeypatch.setattr(Path, "is_file", boom)
+    monkeypatch.setattr(Path, "stat", boom)
+    monkeypatch.setattr(Path, "exists", boom)
+    monkeypatch.setattr(Path, "resolve", boom)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "http://example.com/a.png",
+        "https://example.com/a.png",
+        "HTTP://EXAMPLE.COM/a.png",
+        "data:image/png;base64,aaa",
+        "file:///C:/course/beam.png",
+        r"\\server\share\a.png",
+        "//server/share/a.png",
+    ],
+)
+def test_interpret_image_source_rejects_remote_without_io(
+    source: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _block_path_io(monkeypatch)
+    with pytest.raises(ProtocolError) as exc_info:
+        interpret_image_source(source)
+    assert exc_info.value.code == "invalid_field"
+
+
+def test_interpret_image_source_valid_png_returns_path_without_io(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _block_path_io(monkeypatch)
+    relative = interpret_image_source("photos/beam.png")
+    assert relative == Path("photos/beam.png")
+    absolute = interpret_image_source(r"C:\course\beam.PNG")
+    assert absolute == Path(r"C:\course\beam.PNG")
+
+
+def test_resolve_image_file_happy_path(tmp_path: Path) -> None:
+    path = tmp_path / "tiny.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\n")
+    resolved = resolve_image_file(str(path))
+    assert resolved.is_file()
+    assert resolved.name == "tiny.png"

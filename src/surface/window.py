@@ -1,7 +1,9 @@
 import logging
+import tempfile
+from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QMouseEvent, QResizeEvent, QShowEvent
+from PySide6.QtGui import QImage, QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -13,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from surface.dispatcher import Dispatcher, DispatchResult
-from surface.protocol import Command, EquationCommand, ProtocolError, TextCommand
+from surface.protocol import Command, EquationCommand, ImageCommand, ProtocolError, TextCommand
 from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
@@ -90,6 +92,7 @@ class SurfaceWindow(QWidget):
 
     def run_demo(self) -> None:
         try:
+            path = self._write_demo_png()
             self.apply_commands(
                 [
                     TextCommand(
@@ -103,10 +106,24 @@ class SurfaceWindow(QWidget):
                         id="demo-eq",
                         latex=r"\sigma = \frac{My}{I}",
                     ),
+                    ImageCommand(
+                        type="image",
+                        id="demo-img",
+                        source=str(path),
+                        alt="demo",
+                    ),
                 ]
             )
         except Exception as exc:
             self._set_internal_error(exc)
+
+    def _write_demo_png(self) -> Path:
+        path = Path(tempfile.gettempdir()) / "surface-demo.png"
+        image = QImage(64, 64, QImage.Format_RGB32)
+        image.fill(0xFF4A90D9)
+        if not image.save(str(path), "PNG"):
+            raise OSError(f"could not write {path}")
+        return path
 
     def apply_commands(self, commands: list[Command]) -> None:
         try:

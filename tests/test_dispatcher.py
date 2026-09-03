@@ -102,6 +102,24 @@ def test_equation_created_then_updated() -> None:
     assert workspace.get("eq-1") == second
 
 
+def test_image_command_upsert_without_real_file() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    command = ImageCommand(
+        type="image",
+        id="img-missing",
+        source="definitely-missing.png",
+        alt="missing",
+    )
+    result = dispatcher.dispatch(command)
+    assert result.ok is True
+    assert result.action == "created"
+    assert result.command_id == "img-missing"
+    assert result.command_type == "image"
+    assert result.error_code is None
+    assert workspace.get("img-missing") == command
+
+
 def test_equation_image_plot_are_stored() -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)

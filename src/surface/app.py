@@ -1,5 +1,5 @@
 def run(argv: list[str] | None = None) -> int:
-    """Temporary scaffold until PR 2 opens the Qt window."""
+    """Packaging smoke-check; does not start a GUI."""
     import sys
     sys.stderr.write("surface v0.1 scaffold\n")
     return 0

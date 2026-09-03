@@ -15,7 +15,15 @@ from PySide6.QtWidgets import (
 )
 
 from surface.dispatcher import Dispatcher, DispatchResult
-from surface.protocol import Command, EquationCommand, ImageCommand, ProtocolError, TextCommand
+from surface.protocol import (
+    Command,
+    EquationCommand,
+    ImageCommand,
+    PlotCommand,
+    ProtocolError,
+    Series,
+    TextCommand,
+)
 from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
@@ -111,6 +119,18 @@ class SurfaceWindow(QWidget):
                         id="demo-img",
                         source=str(path),
                         alt="demo",
+                    ),
+                    PlotCommand(
+                        type="plot",
+                        id="demo-plot",
+                        title="demo",
+                        series=(
+                            Series(
+                                x=(0.0, 1.0, 2.0),
+                                y=(0.0, 1.0, 0.0),
+                                kind="line",
+                            ),
+                        ),
                     ),
                 ]
             )

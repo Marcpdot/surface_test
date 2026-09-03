@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QWidget
 from surface.blocks.base import Block
 from surface.blocks.equation import EquationBlock
 from surface.blocks.image import ImageBlock
+from surface.blocks.plot import PlotBlock
 from surface.blocks.text import TextBlock
 from surface.dispatcher import UnknownBlockError
 from surface.protocol import Command
@@ -11,6 +12,7 @@ _FACTORIES = {
     "text": TextBlock,
     "equation": EquationBlock,
     "image": ImageBlock,
+    "plot": PlotBlock,
 }
 
 

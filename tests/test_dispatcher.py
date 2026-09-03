@@ -138,6 +138,44 @@ def test_equation_image_plot_are_stored() -> None:
     assert workspace.get("plot-1") == plot
 
 
+def test_plot_created_then_updated() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    first = PlotCommand(
+        type="plot",
+        id="plot-1",
+        title="first",
+        series=(Series(x=(0.0, 1.0, 2.0), y=(0.0, 1.0, 0.0), kind="line"),),
+    )
+    created = dispatcher.dispatch(first)
+    assert created == DispatchResult(
+        ok=True,
+        action="created",
+        command_id="plot-1",
+        command_type="plot",
+        error_code=None,
+        error_message=None,
+    )
+    assert workspace.get("plot-1") == first
+
+    second = PlotCommand(
+        type="plot",
+        id="plot-1",
+        title="second",
+        xlabel="x",
+        ylabel="y",
+        series=(
+            Series(x=(0.0, 1.0), y=(1.0, 0.0), label="A", kind="scatter"),
+        ),
+    )
+    updated = dispatcher.dispatch(second)
+    assert updated.ok is True
+    assert updated.action == "updated"
+    assert updated.command_id == "plot-1"
+    assert updated.command_type == "plot"
+    assert workspace.get("plot-1") == second
+
+
 def test_type_mismatch_reports_new_type() -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)

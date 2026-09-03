@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from surface.dispatcher import Dispatcher, DispatchResult
-from surface.protocol import Command, ProtocolError, TextCommand
+from surface.protocol import Command, EquationCommand, ProtocolError, TextCommand
 from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
@@ -97,7 +97,12 @@ class SurfaceWindow(QWidget):
                         id="demo-text",
                         content="## Surface demo",
                         format="markdown",
-                    )
+                    ),
+                    EquationCommand(
+                        type="equation",
+                        id="demo-eq",
+                        latex=r"\sigma = \frac{My}{I}",
+                    ),
                 ]
             )
         except Exception as exc:

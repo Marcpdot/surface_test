@@ -69,6 +69,39 @@ def test_text_created_then_updated() -> None:
     assert workspace.get("t-1") == second
 
 
+def test_equation_created_then_updated() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    first = EquationCommand(
+        type="equation",
+        id="eq-1",
+        latex=r"\sigma = \frac{My}{I}",
+    )
+    created = dispatcher.dispatch(first)
+    assert created == DispatchResult(
+        ok=True,
+        action="created",
+        command_id="eq-1",
+        command_type="equation",
+        error_code=None,
+        error_message=None,
+    )
+    assert workspace.get("eq-1") == first
+
+    second = EquationCommand(
+        type="equation",
+        id="eq-1",
+        latex="E = mc^2",
+        display="inline",
+    )
+    updated = dispatcher.dispatch(second)
+    assert updated.ok is True
+    assert updated.action == "updated"
+    assert updated.command_id == "eq-1"
+    assert updated.command_type == "equation"
+    assert workspace.get("eq-1") == second
+
+
 def test_equation_image_plot_are_stored() -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)

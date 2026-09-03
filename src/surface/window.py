@@ -2,11 +2,12 @@ import logging
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QMouseEvent, QResizeEvent, QShowEvent
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QImage, QKeyEvent, QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QSizeGrip,
@@ -23,10 +24,12 @@ from surface.protocol import (
     ProtocolError,
     Series,
     TextCommand,
+    parse_command_list,
 )
 from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
+_INPUT_HEIGHT = 72
 _DEFAULT_SIZE = (960, 720)
 _MIN_SIZE = (640, 480)
 
@@ -67,6 +70,32 @@ class _TitleBar(QWidget):
         super().mousePressEvent(event)
 
 
+class _InputEdit(QPlainTextEdit):
+    submitted = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedHeight(_INPUT_HEIGHT)
+        self.setPlaceholderText("Notat eller JSON-kommando. Ctrl+Enter sender.")
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and (
+            event.modifiers() & Qt.ControlModifier
+        ):
+            self.submitted.emit()
+            return
+        super().keyPressEvent(event)
+
+
+def _commands_from_user_input(text: str, *, text_id: str) -> list[Command]:
+    stripped = text.strip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        return parse_command_list(stripped)
+    return [
+        TextCommand(type="text", id=text_id, content=stripped, format="markdown")
+    ]
+
+
 class SurfaceWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -96,7 +125,41 @@ class SurfaceWindow(QWidget):
         self._status.setFont(font)
         root.addWidget(self._status)
 
+        input_row = QHBoxLayout()
+        input_row.setContentsMargins(8, 4, 8, 4)
+        input_row.setSpacing(8)
+        self._input = _InputEdit(self)
+        self._input.submitted.connect(self._submit_from_input)
+        input_row.addWidget(self._input, 1)
+        send = QPushButton("Send", self)
+        send.clicked.connect(self._submit_from_input)
+        input_row.addWidget(send)
+        root.addLayout(input_row)
+
         self._size_grip = QSizeGrip(self)
+
+    def submit_text(self, text: str) -> None:
+        if not text.strip():
+            return
+        try:
+            commands = _commands_from_user_input(
+                text, text_id=self._allocate_user_id()
+            )
+            self.apply_commands(commands)
+        except ProtocolError as exc:
+            self._set_status_error(exc)
+        except Exception as exc:
+            self._set_internal_error(exc)
+
+    def _submit_from_input(self) -> None:
+        self.submit_text(self._input.toPlainText())
+
+    def _allocate_user_id(self) -> str:
+        existing = set(self._workspace.list_ids())
+        n = 1
+        while f"user-{n}" in existing:
+            n += 1
+        return f"user-{n}"
 
     def run_demo(self) -> None:
         try:

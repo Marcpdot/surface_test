@@ -1,5 +1,7 @@
 from typing import Literal
 
+import pytest
+
 from surface.dispatcher import (
     Dispatcher,
     DispatchResult,
@@ -121,6 +123,40 @@ def test_image_command_upsert_without_real_file() -> None:
     assert workspace.get("img-missing") == command
 
 
+def test_image_created_then_updated() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    first = ImageCommand(
+        type="image",
+        id="img-1",
+        source=r"C:\course\beam.png",
+        alt="first",
+    )
+    created = dispatcher.dispatch(first)
+    assert created == DispatchResult(
+        ok=True,
+        action="created",
+        command_id="img-1",
+        command_type="image",
+        error_code=None,
+        error_message=None,
+    )
+    assert workspace.get("img-1") == first
+
+    second = ImageCommand(
+        type="image",
+        id="img-1",
+        source=r"C:\course\other.png",
+        alt="second",
+    )
+    updated = dispatcher.dispatch(second)
+    assert updated.ok is True
+    assert updated.action == "updated"
+    assert updated.command_id == "img-1"
+    assert updated.command_type == "image"
+    assert workspace.get("img-1") == second
+
+
 def test_equation_image_plot_are_stored() -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)
@@ -177,17 +213,47 @@ def test_plot_created_then_updated() -> None:
     assert workspace.get("plot-1") == second
 
 
-def test_type_mismatch_reports_new_type() -> None:
+@pytest.mark.parametrize(
+    ("original", "incoming"),
+    [
+        (
+            TextCommand(type="text", id="x", content="hello"),
+            EquationCommand(type="equation", id="x", latex="a"),
+        ),
+        (
+            EquationCommand(type="equation", id="x", latex="a"),
+            ImageCommand(type="image", id="x", source="beam.png"),
+        ),
+        (
+            ImageCommand(type="image", id="x", source="beam.png"),
+            PlotCommand(
+                type="plot",
+                id="x",
+                series=(Series(x=(0.0, 1.0), y=(0.0, 1.0)),),
+            ),
+        ),
+        (
+            PlotCommand(
+                type="plot",
+                id="x",
+                series=(Series(x=(0.0, 1.0), y=(0.0, 1.0)),),
+            ),
+            TextCommand(type="text", id="x", content="hello"),
+        ),
+    ],
+)
+def test_type_mismatch_reports_new_type(
+    original: Command, incoming: Command
+) -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)
-    original = TextCommand(type="text", id="x", content="hello")
     dispatcher.dispatch(original)
-    result = dispatcher.dispatch(EquationCommand(type="equation", id="x", latex="a"))
+    result = dispatcher.dispatch(incoming)
     assert result.ok is False
     assert result.action is None
     assert result.error_code == "type_mismatch"
     assert result.command_id == "x"
-    assert result.command_type == "equation"
+    assert result.command_type == incoming.type
     assert workspace.get("x") == original
 
 

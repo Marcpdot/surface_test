@@ -231,7 +231,7 @@ def test_unknown_field_top_level() -> None:
     assert error.command_id == "t-1"
 
 
-@pytest.mark.parametrize("extra", ["color", "code"])
+@pytest.mark.parametrize("extra", ["color", "code", "matplotlib_rc"])
 def test_unknown_field_in_series(extra: str) -> None:
     series = {"x": [0, 1], "y": [1, 0], extra: "red"}
     error = _error({"type": "plot", "id": "p-1", "series": [series]})
@@ -323,6 +323,14 @@ def test_nan_inf_from_python_floats() -> None:
             "type": "plot",
             "id": "p-1",
             "series": [{"x": [0.0, float("inf")], "y": [0.0, 1.0]}],
+        }
+    )
+    assert error.code == "invalid_field"
+    error = _error(
+        {
+            "type": "plot",
+            "id": "p-1",
+            "series": [{"x": [0.0, 1.0], "y": [0.0, float("-inf")]}],
         }
     )
     assert error.code == "invalid_field"

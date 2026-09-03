@@ -16,16 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from surface.dispatcher import Dispatcher, DispatchResult
-from surface.protocol import (
-    Command,
-    EquationCommand,
-    ImageCommand,
-    PlotCommand,
-    ProtocolError,
-    Series,
-    TextCommand,
-    parse_command_list,
-)
+from surface.hermes_bridge import HermesBridge
+from surface.protocol import Command, ProtocolError
 from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
@@ -87,15 +79,6 @@ class _InputEdit(QPlainTextEdit):
         super().keyPressEvent(event)
 
 
-def _commands_from_user_input(text: str, *, text_id: str) -> list[Command]:
-    stripped = text.strip()
-    if stripped.startswith("{") or stripped.startswith("["):
-        return parse_command_list(stripped)
-    return [
-        TextCommand(type="text", id=text_id, content=stripped, format="markdown")
-    ]
-
-
 class SurfaceWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -108,6 +91,7 @@ class SurfaceWindow(QWidget):
 
         self._workspace = Workspace(self)
         self._dispatcher = Dispatcher(self._workspace)
+        self._bridge = HermesBridge()
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -142,7 +126,7 @@ class SurfaceWindow(QWidget):
         if not text.strip():
             return
         try:
-            commands = _commands_from_user_input(
+            commands = self._bridge.from_user_input(
                 text, text_id=self._allocate_user_id()
             )
             self.apply_commands(commands)
@@ -164,39 +148,17 @@ class SurfaceWindow(QWidget):
     def run_demo(self) -> None:
         try:
             path = self._write_demo_png()
-            self.apply_commands(
-                [
-                    TextCommand(
-                        type="text",
-                        id="demo-text",
-                        content="## Surface demo",
-                        format="markdown",
-                    ),
-                    EquationCommand(
-                        type="equation",
-                        id="demo-eq",
-                        latex=r"\sigma = \frac{My}{I}",
-                    ),
-                    ImageCommand(
-                        type="image",
-                        id="demo-img",
-                        source=str(path),
-                        alt="demo",
-                    ),
-                    PlotCommand(
-                        type="plot",
-                        id="demo-plot",
-                        title="demo",
-                        series=(
-                            Series(
-                                x=(0.0, 1.0, 2.0),
-                                y=(0.0, 1.0, 0.0),
-                                kind="line",
-                            ),
-                        ),
-                    ),
-                ]
-            )
+            raw = self._bridge.demo_output(image_source=str(path))
+            self.inject_hermes_output(raw)
+        except Exception as exc:
+            self._set_internal_error(exc)
+
+    def inject_hermes_output(self, raw: str) -> None:
+        try:
+            commands = self._bridge.from_hermes_output(raw)
+            self.apply_commands(commands)
+        except ProtocolError as exc:
+            self._set_status_error(exc)
         except Exception as exc:
             self._set_internal_error(exc)
 

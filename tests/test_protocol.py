@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from surface.hermes_bridge import HermesBridge
 from surface.image_source import interpret_image_source, resolve_image_file
 from surface.protocol import (
     EquationCommand,
@@ -522,3 +523,36 @@ def test_resolve_image_file_happy_path(tmp_path: Path) -> None:
     resolved = resolve_image_file(str(path))
     assert resolved.is_file()
     assert resolved.name == "tiny.png"
+
+
+def test_from_hermes_output_happy_path() -> None:
+    commands = HermesBridge().from_hermes_output(
+        '{"type":"text","id":"h-1","content":"hei"}'
+    )
+    assert commands == [
+        TextCommand(type="text", id="h-1", content="hei", format="markdown")
+    ]
+
+
+def test_from_hermes_output_cannot_translate_prose() -> None:
+    with pytest.raises(ProtocolError) as exc_info:
+        HermesBridge().from_hermes_output("this is prose, not protocol")
+    assert exc_info.value.code == "cannot_translate"
+
+
+def test_from_user_input_wraps_prose_as_text_command() -> None:
+    commands = HermesBridge().from_user_input("  notat  ", text_id="user-1")
+    assert commands == [
+        TextCommand(type="text", id="user-1", content="notat", format="markdown")
+    ]
+
+
+def test_from_user_input_json_ignores_text_id() -> None:
+    commands = HermesBridge().from_user_input(
+        '{"type":"text","id":"h-1","content":"hei"}',
+        text_id="user-ignored",
+    )
+    assert commands == [
+        TextCommand(type="text", id="h-1", content="hei", format="markdown")
+    ]
+    assert all(command.id != "user-ignored" for command in commands)

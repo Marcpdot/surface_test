@@ -6,6 +6,7 @@ from surface.dispatcher import (
     TypeMismatchError,
     UnknownBlockError,
 )
+from surface.hermes_bridge import HermesBridge
 from surface.protocol import (
     Command,
     EquationCommand,
@@ -230,3 +231,23 @@ def test_dispatch_many_continues_after_mismatch() -> None:
     assert results[2].action == "created"
     assert workspace.get("a") == first
     assert workspace.get("b") == third
+
+
+def test_hermes_bridge_dispatch_many_chain() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    commands = HermesBridge().from_hermes_output(
+        '{"type":"text","id":"h-1","content":"hei"}'
+    )
+    results = dispatcher.dispatch_many(commands)
+    assert results == [
+        DispatchResult(
+            ok=True,
+            action="created",
+            command_id="h-1",
+            command_type="text",
+            error_code=None,
+            error_message=None,
+        )
+    ]
+    assert workspace.get("h-1") == commands[0]

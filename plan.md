@@ -1,148 +1,201 @@
-# Plan — v0.2
+# Plan — v0.3
 
-## Kort status fra v0.1
+## Kort status
 
-v0.1 etablerte en borderless native PySide6-Surface med et typesikkert command-protocol for `text`, `equation`, `image` og `plot`, samt dispatcher, workspace, rendering, input og kontrollert feilhåndtering. Dette er nå grunnlaget v0.2 bygger videre på.
+v0.1 etablerte Surface-kjernen: native PySide6-vindu, typesikkert command-protocol og rendering av `text`, `equation`, `image` og `plot`.
+
+v0.2 la til komposisjon med `layout`, slik at eksisterende blocks kan organiseres vertikalt og horisontalt med kontrollert ownership, cycle-sjekk og upsert.
 
 ## Mål
 
-Bygg komposisjon av representasjoner slik at eksisterende blocks kan organiseres sammen i en arbeidsflate med meningsfulle relasjoner, i stedet for kun å vises som en vertikal stabel.
+Koble ekte Hermes til Surface slik at naturlig språk fra brukeren kan oversettes til validerte Surface-kommandoer og endre arbeidsflaten uten at brukeren må skrive JSON eller tekniske kommandoer manuelt.
 
 ## Scope
 
-### Skal med i v0.2
-- Et lite, eksplisitt layout-/composition-språk for å organisere eksisterende blocks.
-- Minst to enkle komposisjonsformer:
-  - vertikal
-  - horisontal/split
-- Mulighet til å gruppere flere eksisterende block-id-er i én komposisjon.
-- Rekursiv eller nestbar struktur dersom dette kan gjøres uten unødvendig kompleksitet.
-- Surface skal eie hvordan layout faktisk rendres; eksterne produsenter skal kun uttrykke struktur/intensjon.
-- Eksisterende `text`, `equation`, `image` og `plot` skal kunne brukes uendret inni komposisjoner.
-- Kontrollert håndtering av ugyldige referanser, duplikater eller ugyldig layoutstruktur.
-- Tester for parsing/validering av composition-protocol og routing til workspace.
-- En demo som viser minst én reell studie-lignende komposisjon, for eksempel tekst + figur ved siden av hverandre og ligning + plot under.
+### Skal med i v0.3
+- Ekte Hermes-transport bak `hermes_bridge.py`.
+- Naturlig språk fra Surface-input skal kunne sendes til Hermes.
+- Hermes skal returnere strukturert output som kan normaliseres til eksisterende Surface-protocol.
+- Hermes skal kun kunne uttrykke eksisterende command-typer:
+  - `text`
+  - `equation`
+  - `image`
+  - `plot`
+  - `layout`
+- Surface skal fortsatt eie parsing, validering, state, composition og rendering.
+- Hermes-output skal alltid gå gjennom eksisterende protocol før dispatch.
+- Kontrollert håndtering av:
+  - ugyldig JSON
+  - ukjent command-type
+  - manglende felt
+  - ugyldige layout-referanser
+  - tom eller ubrukelig Hermes-output
+  - transport-/prosessfeil
+- Minst noen få representative naturlig-språk-prompts som eval/test.
+- Tydelig separasjon mellom transport, prompting/output-normalisering og Surface-core.
+- Eksisterende `--inject`/lokal strukturert input skal fortsatt fungere for debugging og tester.
 
-### Skal ikke med i v0.2
-- Ekte Hermes-/LLM-integrasjon.
-- Automatisk AI-generert layout.
+### Skal ikke med i v0.3
+- Nye workspace-manipulasjonskommandoer utover eksisterende protocol.
+- Fri naturlig språk-styring av flytting, sletting eller restrukturering utover det Hermes kan uttrykke med eksisterende `layout`-commands.
 - Memory-system.
 - Knowledge graph.
 - Learning-loop eller mastery-modell.
+- Automatisk pedagogisk planlegging.
 - 3D-rendering.
 - Voice.
 - Multi-agent-system.
 - Plugins/MCP.
-- Fri canvas med vilkårlig dragging/positionering.
-- Fullverdig docking/window manager.
-- Ferdig visuell design.
 - Persistente workspaces.
+- Ny layoutmotor.
+- Visuell design-pass.
 
 ## Arkitekturretning
 
-v0.1 har primitive representasjoner:
+v0.3 skal bevare samme grense som før:
 
 ```text
-TextBlock
-EquationBlock
-ImageBlock
-PlotBlock
+User natural language
+        |
+        v
+Surface input
+        |
+        v
+Hermes Bridge
+        |
+        +--> Hermes transport
+        |       |
+        |       v
+        |   Hermes / model
+        |       |
+        |       v
+        +<-- raw model output
+        |
+        v
+output normalisation
+        |
+        v
+Surface Protocol
+        |
+        v
+Dispatcher
+        |
+        v
+Workspace / Blocks / Layout
 ```
 
-v0.2 introduserer komposisjon over disse:
+Hermes skal ikke kjenne Qt eller manipulere widgets direkte. Den skal kun produsere strukturert intent som Surface kan validere og anvende.
+
+## Viktig kontrakt
+
+`hermes_bridge.py` er adapteren mellom ekstern agent og Surface.
+
+Konseptuelt:
 
 ```text
-Representation
-├── Primitive
-│   ├── TextBlock
-│   ├── EquationBlock
-│   ├── ImageBlock
-│   └── PlotBlock
-└── Composition
-    ├── Vertical
-    └── Horizontal / Split
+natural language
+    -> Hermes request
+    -> raw Hermes output
+    -> normalised JSON/commands
+    -> parse_command_list(...)
+    -> list[Command]
 ```
 
-Målet er at Surface kan uttrykke noe i retning av:
+Surface-core skal ikke være avhengig av hvordan Hermes startes, hvilken modell Hermes bruker eller hvordan transporten er implementert.
+
+## Eksempel på ønsket flyt
+
+Bruker:
 
 ```text
-Horizontal
-├── TextBlock(problem)
-└── ImageBlock(figure)
-
-Vertical
-├── Horizontal(problem, figure)
-└── Horizontal(equation, plot)
+Vis bøyspenningsformelen og lag et enkelt momentdiagram ved siden av forklaringen.
 ```
 
-Komposisjon skal beskrive relasjonen mellom representasjonene, ikke innholdet i dem.
-
-## Protocol-retning
-
-Composition bør bygges som en liten utvidelse av det eksisterende command-språket, ikke som en separat UI-API.
-
-Konseptuelt eksempel:
+Hermes kan produsere noe i retning av:
 
 ```json
 {
-  "type": "layout",
-  "id": "study-1",
-  "direction": "horizontal",
-  "children": ["problem-1", "figure-1"]
-}
-```
-
-En nestet variant kan senere være:
-
-```json
-{
-  "type": "layout",
-  "id": "study-1",
-  "direction": "vertical",
-  "children": [
+  "commands": [
     {
-      "direction": "horizontal",
-      "children": ["problem-1", "figure-1"]
+      "type": "text",
+      "id": "explanation-1",
+      "content": "Bøyspenning beskrives med ..."
     },
     {
+      "type": "equation",
+      "id": "eq-1",
+      "latex": "\\sigma = \\frac{My}{I}"
+    },
+    {
+      "type": "plot",
+      "id": "plot-1",
+      "series": [
+        {"x": [0, 1, 2], "y": [0, 1, 0], "label": "M", "kind": "line"}
+      ],
+      "title": "Moment along beam",
+      "xlabel": "x",
+      "ylabel": "M"
+    },
+    {
+      "type": "layout",
+      "id": "study-1",
       "direction": "horizontal",
-      "children": ["equation-1", "plot-1"]
+      "children": ["explanation-1", "plot-1"]
     }
   ]
 }
 ```
 
-Eksakt schema skal avgjøres i implementasjonsdesignet. Det viktige er at formatet er lite, eksplisitt, validerbart og enkelt å utvide senere.
+Det viktige i v0.3 er ikke at output alltid er perfekt pedagogisk, men at naturlig språk kan drive eksisterende Surface-state gjennom en trygg og tydelig kontrakt.
 
 ## Designspørsmål som skal avklares i implementasjonsplanen
 
-- Skal `layout` være en ny `Command`-type eller en separat komposisjonsnode over eksisterende commands?
-- Skal children kun være block-id-er i v0.2, eller skal nesting støttes direkte?
-- Hvordan skal ownership fungere når en block flyttes inn i en komposisjon?
-- Skal samme block kunne eksistere i flere komposisjoner samtidig, eller må én block ha én visuell forelder?
-- Hvordan skal oppdatering av en eksisterende layout fungere med samme `id`?
-- Hvordan skal ugyldige eller manglende child-referanser håndteres uten å krasje UI-et?
-- Hvordan unngår vi at layout-protocolen blir en generell UI-beskrivelse av Qt-widgets?
+- Hvilken Hermes-transport er minst kompleks og mest robust for lokal v0.3?
+- Skal Hermes kjøres som subprocess, CLI-kall, lokal HTTP-prosess eller gjennom annen eksisterende mekanisme?
+- Skal Hermes holdes varm mellom requests, eller kan v0.3 bruke ett kall per input?
+- Hvordan instrueres Hermes til å produsere kun gyldige Surface-commands?
+- Skal bridge trekke JSON ut av prose/code fences, eller skal ikke-konform output avvises direkte?
+- Hvor mye normalisering er akseptabelt før bridge begynner å skjule modellfeil?
+- Hvordan skal timeout, prosessfeil og tom output rapporteres til UI uten å blokkere eller krasje vinduet?
+- Må Hermes-kallet kjøres utenfor Qt GUI-tråden for å unngå at vinduet fryser?
+- Hvordan testes bridge uten å kreve et ekte modellkall i hver test?
+
+## Eval / representative prompts
+
+Minst disse typene skal prøves:
+
+1. Enkel tekst:
+   - «Forklar hva gradient betyr kort.»
+2. Tekst + ligning:
+   - «Vis bøyspenningsformelen og forklar symbolene.»
+3. Tekst + plot:
+   - «Vis et enkelt trekantformet momentdiagram.»
+4. Flere representasjoner + layout:
+   - «Vis forklaring og figur/plot ved siden av hverandre.»
+5. Uklart eller ikke-renderbart input:
+   - Surface skal håndtere resultatet kontrollert uten crash.
 
 ## Definition of Done
 
-v0.2 er ferdig når:
+v0.3 er ferdig når:
 
-- Eksisterende primitive blocks fortsatt fungerer som i v0.1.
-- Surface kan opprette minst én vertikal og én horisontal komposisjon gjennom strukturert input.
-- Flere eksisterende representasjoner kan organiseres i én meningsfull studie-lignende arbeidsflate.
-- En komposisjon kan oppdateres kontrollert uten å duplisere eller miste blocks.
-- Ugyldige layout-kommandoer avvises kontrollert uten at applikasjonen krasjer.
-- Composition-protocol og routing har automatiserte tester.
-- Demoen viser at layouten faktisk gjør Surface mer nyttig enn den rene vertikale stabelen fra v0.1.
-- Det er ikke introdusert en generell layoutmotor eller abstraheringer som ikke er nødvendige for disse konkrete behovene.
+- En vanlig naturlig språk-prompt kan skrives i Surface og sendes til ekte Hermes.
+- Hermes-output går gjennom `hermes_bridge.py` og eksisterende Surface-protocol før dispatch.
+- Minst én prompt oppretter flere ulike representasjoner og én `layout` uten manuell JSON.
+- Ugyldig eller ufullstendig Hermes-output gir kontrollert feil og krasjer ikke applikasjonen.
+- Hermes-transportfeil eller timeout håndteres kontrollert.
+- UI fryser ikke merkbart under normal Hermes-bruk.
+- Eksisterende primitive commands, `layout`, `--inject` og v0.2-tester fortsetter å fungere.
+- Bridge-/transportlogikk kan testes uten ekte modellkall gjennom fake/mock transport.
+- Det er ikke lagt til nye command-typer eller workspace-manipulasjon bare for å gjøre Hermes enklere å bruke.
 
 ## Designprinsipper
 
-- Komposisjon beskriver relasjoner mellom representasjoner; Surface bestemmer konkret rendering.
-- Behold eksisterende primitive blocks enkle og uavhengige.
-- Foretrekk noen få komponerbare primitives fremfor mange spesialiserte layouts.
-- Unngå å modellere hele Qt-widget-treet i protocolen.
-- Bruk en rekursiv struktur bare dersom den faktisk gjør implementasjonen enklere og mer uttrykksfull.
+- Hermes uttrykker intent; Surface eier state og rendering.
+- All modell-output behandles som uvalidert ekstern input.
+- Eksisterende protocol er kontrakten; v0.3 skal primært integrere, ikke redesigne den.
+- Hold transport utskiftbar og isolert fra core.
+- Ikke skjul modellfeil med aggressiv parsing eller heuristikker.
+- Preferer eksplisitt strukturert output fremfor teknisk naturlig språk som må tolkes senere.
+- Bygg akkurat nok agentintegrasjon til å gjøre Surface naturlig å bruke.
 - Generaliser etter observerte behov, ikke før.
-- Målbar nytte kommer før arkitektonisk kompleksitet.

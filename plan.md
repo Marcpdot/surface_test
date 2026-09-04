@@ -1,180 +1,226 @@
-# Plan — v0.4
+# Plan — v0.5
 
 ## Mål
 
-Gjør Surface i stand til å manipulere eksisterende workspace-state kontrollert gjennom eksplisitte commands, slik at Hermes kan endre en allerede oppbygd arbeidsflate i stedet for bare å legge til nytt innhold.
+Gjør Surface i stand til å støtte en enkel, interaktiv study-loop på et eksisterende workspace, slik at Hermes kan gi hint, be om brukerforsøk, gi kontrollert feedback og gå videre stegvis uten å avsløre hele løsningen med mindre brukeren ber om det.
 
 ## Scope
 
-### Skal med i v0.4
-- Et lite, eksplisitt workspace-manipulasjonsspråk over eksisterende blocks og layouts.
-- Mulighet til å oppdatere eksisterende block-innhold via eksisterende upsert-by-id.
-- Mulighet til å endre struktur i workspace uten å måtte bygge hele flaten på nytt.
-- Minst disse manipulasjonene:
-  - flytte/reparent en eksisterende block eller layout til en annen layout
-  - endre rekkefølge på children i en layout
-  - flytte en block tilbake til root
-  - fjerne en block eller layout kontrollert
-- Layout- og ownership-regler skal fortsatt være eksplisitte og validerte.
-- Ugyldige manipulasjoner skal avvises uten delvis mutasjon av workspace.
-- Hermes skal kunne uttrykke manipulasjoner gjennom Surface-protokollen, men Surface skal fortsatt eie state, validering og konkret Qt-manipulasjon.
-- Eksisterende `text`, `equation`, `image`, `plot` og `layout` skal fortsette å fungere som før.
-- Tester for alle nye workspace-operasjoner og deres feilhåndtering.
-- En demo eller manuell test som viser at en eksisterende studieflate kan reorganiseres gjennom en ny naturlig språk-prompt uten å opprette alt på nytt.
+### Skal med i v0.5
+- En liten, eksplisitt study-interaction-modell over eksisterende workspace og Hermes-integrasjon.
+- Minst denne flyten:
+  1. oppgave/problem finnes allerede i workspace
+  2. bruker ber om hjelp eller forsøker et svar
+  3. Hermes gir neste pedagogiske respons
+  4. Surface oppdaterer workspace kontrollert
+  5. løsningen kan holdes tilbake eller vises stegvis
+- Brukeren skal kunne be om:
+  - kun et hint
+  - ett neste steg
+  - kort feedback på eget forsøk
+  - ny variant av samme type oppgave
+  - å fortsette eller avsløre løsningen eksplisitt
+- Hermes skal bruke eksisterende workspace-snapshot og stabile IDs for å oppdatere relevante blocks i stedet for å bygge hele flaten på nytt.
+- Study-respons skal fortsatt uttrykkes gjennom Surface-protokollen og eksisterende workspace-operasjoner.
+- Minst én enkel study-state eller interaction-context som forteller Hermes hva slags hjelp som er ønsket i den aktuelle runden.
+- Kontrollert håndtering av uklare eller uegnede study-requests uten crash eller uønsket full løsning.
+- Tester for study-routing, prompt/context og at eksisterende workspace-state ikke korrumperes.
+- En manuell demonstrasjon der en oppgave brukes gjennom flere runder, for eksempel:
+  - «gi meg bare et hint»
+  - bruker svarer
+  - Hermes gir feedback
+  - «vis neste steg»
 
-### Skal ikke med i v0.4
+### Skal ikke med i v0.5
 - Automatisk import eller parsing av ekte bok-/øvingsoppgaver.
 - PDF-, bilde- eller OCR-ingestion.
-- Memory-system.
+- Full mastery-modell eller knowledge tracing.
+- Langtidsminne mellom study sessions.
+- Automatisk pensumplanlegging.
 - Knowledge graph.
-- Learning-loop eller mastery-modell.
-- Automatisk pedagogisk planlegging.
 - 3D-rendering.
 - Voice.
 - Multi-agent-system.
 - Plugins/MCP.
 - Persistente workspaces.
-- Fri canvas med vilkårlig dragging.
-- Full docking/window manager.
-- Ny generell layoutmotor.
+- Ny layoutmotor.
+- Fri canvas/docking.
 - Ferdig visuell design.
 
 ## Arkitekturretning
 
-v0.4 skal utvide den eksisterende command-kontrakten med noen få eksplisitte workspace-operasjoner, ikke introdusere en separat Qt- eller widget-API.
-
-Konseptuelt:
+v0.5 skal bygge på det som allerede finnes:
 
 ```text
-User natural language
-        |
-        v
+Workspace state
+     |
+     v
+Workspace snapshot
+     |
+     v
+User study request / attempt
+     |
+     v
+Study interaction context
+     |
+     v
 Hermes
-        |
-        v
-Surface command(s)
-        |
-        v
-Protocol validation
-        |
-        v
-Workspace operation
-        |
-        v
-Existing workspace state changes
+     |
+     v
+Surface commands
+     |
+     v
+Atomic protocol + workspace update
 ```
 
-Hermes skal fortsatt ikke manipulere widgets direkte. Den skal kun uttrykke ønsket state-endring gjennom validerte commands.
+Study-laget skal ikke eie rendering eller Qt-state. Det skal kun beskrive pedagogisk intensjon og kontekst rundt den neste Hermes-responsen.
 
-## Manipulasjonsmodell
+## Study interaction
 
-v0.4 skal bygge videre på eksisterende identitet og ownership:
+v0.5 trenger ikke et fullverdig pedagogisk system. Målet er å bevise én liten feedback-loop:
 
-- alle blocks/layouts har stabile `id`
-- én visuell parent per node
-- root er gyldig parent
-- layouts eier rekkefølgen på sine children
-- primitive upserts oppdaterer innhold uten å endre plassering
+```text
+Problem
+  -> Hint
+  -> User attempt
+  -> Feedback
+  -> Next hint/step
+  -> ...
+```
 
-Nye operasjoner bør være små og ortogonale.
+Surface skal kunne skille mellom ulike intensjoner, for eksempel:
 
-Konseptuelle eksempler:
+```text
+hint_only
+next_step
+check_attempt
+show_solution
+new_variant
+```
+
+Eksakt representasjon avgjøres i implementasjonsplanen. Det viktige er at study-intensjon er eksplisitt nok til at Hermes ikke automatisk løser alt.
+
+## Viktig designregel: ikke avslør mer enn forespurt
+
+Når brukeren ber om hint eller feedback skal systemet instruere Hermes til å begrense responsen til akkurat det nivået.
+
+Eksempel:
+
+Bruker:
+
+```text
+Gi meg bare et hint.
+```
+
+Ønsket respons kan være:
+
+```text
+- én kort retning eller påminnelse
+- eventuell relevant ligning dersom nødvendig
+- ingen full utregning
+- ingen fasit
+```
+
+Bruker:
+
+```text
+Jeg fikk 60 MPa. Er det riktig?
+```
+
+Ønsket respons:
+
+```text
+- vurder forsøket
+- forklar kort hva som er riktig/feil
+- gi neste korrigerende hint ved behov
+- ikke løs resten automatisk
+```
+
+## Workspace-bruk
+
+v0.5 skal bruke v0.4-manipulasjonen i stedet for å lage en separat study-UI.
+
+Konseptuelt kan workspace bestå av eksisterende blocks som:
+
+```text
+problem-1
+attempt-1
+hint-1
+feedback-1
+step-1
+solution-1
+```
+
+Hermes kan opprette eller oppdatere disse gjennom eksisterende `text`, `equation`, `plot`, `layout`, `move` og `remove`-commands.
+
+Det skal ikke innføres spesialiserte Qt-widgets for «hint», «feedback» eller «solution» i v0.5 med mindre implementasjonsdesignet viser et konkret behov.
+
+## Study context til Hermes
+
+Hermes trenger mer enn bare workspace-struktur i v0.5. Implementasjonsplanen skal definere det minste ekstra contextet som trengs for study-loop, for eksempel:
 
 ```json
 {
-  "type": "move",
-  "id": "eq-1",
-  "parent": "row-model",
-  "index": 0
+  "study": {
+    "mode": "hint_only",
+    "user_message": "Jeg skjønner ikke hvordan jeg starter.",
+    "target_id": "problem-1"
+  }
 }
 ```
 
-```json
-{
-  "type": "move",
-  "id": "plot-1",
-  "parent": null
-}
-```
+Dette skal være kort, serialiserbart og eksplisitt.
 
-```json
-{
-  "type": "remove",
-  "id": "hint-1"
-}
-```
-
-Eksakt schema skal avgjøres i implementasjonsplanen. Det viktige er at operasjonene er eksplisitte, validerbare og enkle å anvende atomisk.
+Det skal ikke utvikles til et fullverdig learner-profile eller mastery-system i v0.5.
 
 ## Designspørsmål som skal avklares i implementasjonsplanen
 
-- Skal `move` og `remove` være egne command-typer, eller bør layout-upsert alene uttrykke deler av dette?
-- Trenger vi en egen `reorder`-kommando, eller kan `move(..., index=...)` dekke behovet?
-- Hvordan representeres root som parent på en eksplisitt måte?
-- Hvilke regler gjelder når en layout fjernes: skal children returnere til root eller fjernes rekursivt?
-- Hvordan skal `remove` av en block som brukes i en layout håndteres?
-- Hvordan sikrer vi at en sekvens av manipulasjonskommandoer ikke etterlater workspace i delvis mutert state ved feil?
-- Skal flere operasjoner i én Hermes-response anvendes sekvensielt som i dag, eller trenger enkelte workspace-endringer en liten atomisk batch-grense?
-- Hvordan skal Hermes få nok kunnskap om eksisterende workspace-id-er og struktur til å referere til dem korrekt, uten å sende hele Qt-state?
-- Hva er minste workspace-snapshot som må gis til Hermes for presis manipulasjon?
-- Hvordan unngår vi at protokollen utvikler seg til et generelt imperative UI-språk?
+- Skal study-intensjon være en intern enum/dataclass eller en ny Surface-command?
+- Hvordan skilles et vanlig natural-language workspace-request fra et study-request?
+- Trenger Hermes problem-content i prompten, eller er workspace-snapshot uten content for lite for study-feedback?
+- Hvis content må inkluderes: hva er minste sikre og relevante study-context som kan sendes uten å gjøre snapshotet til en full workspace-dump?
+- Hvordan refererer brukeren til eget forsøk og riktig problem/block pålitelig?
+- Skal attempts lagres som vanlige `text`-blocks eller bare sendes som request-context?
+- Hvordan sikrer vi at `hint_only` faktisk ikke resulterer i full løsning?
+- Hvordan bør «new_variant» fungere uten å introdusere en task-ingestion/task-model allerede nå?
+- Hvordan håndteres en study-request som ikke passer til innholdet i workspace?
+- Trenger vi en enkel session-state i Surface, eller kan v0.5 være stateless mellom hver request utover eksisterende workspace?
 
-## Viktig nytt behov: workspace context til Hermes
+## Representative study-scenarier
 
-For første gang må Hermes kunne referere til eksisterende state på en pålitelig måte.
+Minst disse skal fungere:
 
-v0.4 skal derfor definere en liten, serialiserbar workspace-beskrivelse som kan gis til Hermes, for eksempel:
-
-```json
-{
-  "nodes": [
-    {"id": "problem-1", "type": "text", "parent": "row-1"},
-    {"id": "figure-1", "type": "image", "parent": "row-1"},
-    {"id": "row-1", "type": "layout", "direction": "horizontal", "parent": "study-1"},
-    {"id": "study-1", "type": "layout", "direction": "vertical", "parent": null}
-  ]
-}
-```
-
-Dette skal være Surface-state, ikke Qt-state. Ingen widget-geometri, styling eller interne Qt-objekter skal eksponeres.
-
-## Representative manipulasjoner
-
-Minst disse scenariene skal fungere:
-
-1. «Flytt ligningen ved siden av plottet.»
-2. «Legg forklaringen over figuren.»
-3. «Flytt plottet tilbake ut av gruppen.»
-4. «Bytt rekkefølge på ligningen og plottet.»
-5. «Fjern hintet.»
-6. «Oppdater forklaringen, men behold plasseringen.»
-7. Ugyldig id, cycle eller allerede ugyldig parent skal avvises kontrollert uten state-korrupsjon.
+1. «Gi meg bare et hint til denne oppgaven.»
+2. «Vis ett neste steg, men ikke løs resten.»
+3. «Jeg fikk 60 MPa. Er det riktig?»
+4. «Hvor gjorde jeg feil?»
+5. «Lag en ny variant med andre tall.»
+6. «Nå kan du vise hele løsningen.»
+7. Uklart study-request skal håndteres kontrollert uten at hele løsningen genereres automatisk.
 
 ## Definition of Done
 
-v0.4 er ferdig når:
+v0.5 er ferdig når:
 
-- En eksisterende workspace kan manipuleres uten å bygge hele flaten på nytt.
-- Surface støtter kontrollert flytting/reparenting av eksisterende blocks/layouts.
-- Surface støtter kontrollert endring av rekkefølge i layout.
-- En node kan flyttes tilbake til root.
-- En node kan fjernes med tydelig og dokumentert semantikk.
-- Primitive upserts fortsetter å oppdatere innhold på stedet uten å endre plassering.
-- Ugyldige manipulasjoner avvises uten delvis mutasjon eller tap/duplisering av blocks.
-- Hermes kan referere til eksisterende workspace-id-er gjennom en liten serialisert workspace-beskrivelse, uten tilgang til Qt-state.
-- Minst én naturlig språk-prompt endrer strukturen på en allerede eksisterende studieflate.
-- Alle nye workspace-operasjoner har automatiserte tester.
-- Eksisterende v0.1–v0.3-funksjonalitet fortsetter å fungere.
-- Det er ikke introdusert en generell UI-layoutmotor eller imperative widget-kontroller.
+- En eksisterende oppgave i workspace kan brukes gjennom minst tre study-runder uten å bygge flaten på nytt.
+- Brukeren kan be om et hint uten at full løsning vises.
+- Brukeren kan sende et eget forsøk og få begrenset, relevant feedback.
+- Brukeren kan be om ett neste steg og få workspace oppdatert med bare dette steget.
+- Full løsning vises først når brukeren eksplisitt ber om det i den validerte demo-flowen.
+- Hermes kan bruke eksisterende workspace-IDs og study-context til å oppdatere relevante blocks.
+- v0.4 atomisk workspace-manipulasjon brukes fortsatt for alle workspace-endringer.
+- Study-interaction kan testes med fake/mock Hermes uten ekte modellkall.
+- Feil eller uklare study-requests håndteres kontrollert uten state-korrupsjon eller crash.
+- Eksisterende v0.1–v0.4-funksjonalitet fortsetter å fungere.
+- Det er ikke introdusert full mastery-tracking, oppgaveimport, generell pedagogisk planner eller nye UI-abstraksjoner uten konkret behov.
 
 ## Designprinsipper
 
-- Surface eier state; Hermes uttrykker bare ønsket state-endring.
-- Identitet (`id`) er grunnlaget for all manipulasjon.
-- Workspace-context til Hermes skal beskrive semantisk state, ikke Qt-internals.
-- Nye operasjoner skal være få, eksplisitte og ortogonale.
-- Foretrekk deklarative state-endringer fremfor tekniske UI-instruksjoner.
-- Ingen delvis mutasjon ved avviste commands.
-- Behold én visuell parent per node.
-- Ikke generaliser til fri canvas eller generell widget-kontroll før konkrete behov krever det.
-- v0.4 skal kun bygge infrastrukturen som trengs for at en senere versjon kan sette opp og videreutvikle ekte oppgaver på Surface.
+- Study-loop først, learning-platform senere.
+- Ikke avslør mer enn brukeren ber om.
+- Hermes uttrykker pedagogisk respons; Surface eier state, validering og rendering.
+- Bruk eksisterende representasjoner og workspace-operasjoner før nye abstraheringer introduseres.
+- Hold study-context lite og eksplisitt.
+- Ikke bygg mastery/learner model før faktiske study-sessions viser behovet.
+- Bruk ekte study-interaksjoner som feedback på hva v0.6 bør bli.
+- Ekte bok-/øvingsoppgave-ingestion flyttes til en senere versjon.

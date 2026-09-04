@@ -1,43 +1,30 @@
-# Plan — v0.3
-
-## Kort status
-
-v0.1 etablerte Surface-kjernen: native PySide6-vindu, typesikkert command-protocol og rendering av `text`, `equation`, `image` og `plot`.
-
-v0.2 la til komposisjon med `layout`, slik at eksisterende blocks kan organiseres vertikalt og horisontalt med kontrollert ownership, cycle-sjekk og upsert.
+# Plan — v0.4
 
 ## Mål
 
-Koble ekte Hermes til Surface slik at naturlig språk fra brukeren kan oversettes til validerte Surface-kommandoer og endre arbeidsflaten uten at brukeren må skrive JSON eller tekniske kommandoer manuelt.
+Gjør Surface i stand til å manipulere eksisterende workspace-state kontrollert gjennom eksplisitte commands, slik at Hermes kan endre en allerede oppbygd arbeidsflate i stedet for bare å legge til nytt innhold.
 
 ## Scope
 
-### Skal med i v0.3
-- Ekte Hermes-transport bak `hermes_bridge.py`.
-- Naturlig språk fra Surface-input skal kunne sendes til Hermes.
-- Hermes skal returnere strukturert output som kan normaliseres til eksisterende Surface-protocol.
-- Hermes skal kun kunne uttrykke eksisterende command-typer:
-  - `text`
-  - `equation`
-  - `image`
-  - `plot`
-  - `layout`
-- Surface skal fortsatt eie parsing, validering, state, composition og rendering.
-- Hermes-output skal alltid gå gjennom eksisterende protocol før dispatch.
-- Kontrollert håndtering av:
-  - ugyldig JSON
-  - ukjent command-type
-  - manglende felt
-  - ugyldige layout-referanser
-  - tom eller ubrukelig Hermes-output
-  - transport-/prosessfeil
-- Minst noen få representative naturlig-språk-prompts som eval/test.
-- Tydelig separasjon mellom transport, prompting/output-normalisering og Surface-core.
-- Eksisterende `--inject`/lokal strukturert input skal fortsatt fungere for debugging og tester.
+### Skal med i v0.4
+- Et lite, eksplisitt workspace-manipulasjonsspråk over eksisterende blocks og layouts.
+- Mulighet til å oppdatere eksisterende block-innhold via eksisterende upsert-by-id.
+- Mulighet til å endre struktur i workspace uten å måtte bygge hele flaten på nytt.
+- Minst disse manipulasjonene:
+  - flytte/reparent en eksisterende block eller layout til en annen layout
+  - endre rekkefølge på children i en layout
+  - flytte en block tilbake til root
+  - fjerne en block eller layout kontrollert
+- Layout- og ownership-regler skal fortsatt være eksplisitte og validerte.
+- Ugyldige manipulasjoner skal avvises uten delvis mutasjon av workspace.
+- Hermes skal kunne uttrykke manipulasjoner gjennom Surface-protokollen, men Surface skal fortsatt eie state, validering og konkret Qt-manipulasjon.
+- Eksisterende `text`, `equation`, `image`, `plot` og `layout` skal fortsette å fungere som før.
+- Tester for alle nye workspace-operasjoner og deres feilhåndtering.
+- En demo eller manuell test som viser at en eksisterende studieflate kan reorganiseres gjennom en ny naturlig språk-prompt uten å opprette alt på nytt.
 
-### Skal ikke med i v0.3
-- Nye workspace-manipulasjonskommandoer utover eksisterende protocol.
-- Fri naturlig språk-styring av flytting, sletting eller restrukturering utover det Hermes kan uttrykke med eksisterende `layout`-commands.
+### Skal ikke med i v0.4
+- Automatisk import eller parsing av ekte bok-/øvingsoppgaver.
+- PDF-, bilde- eller OCR-ingestion.
 - Memory-system.
 - Knowledge graph.
 - Learning-loop eller mastery-modell.
@@ -47,155 +34,147 @@ Koble ekte Hermes til Surface slik at naturlig språk fra brukeren kan oversette
 - Multi-agent-system.
 - Plugins/MCP.
 - Persistente workspaces.
-- Ny layoutmotor.
-- Visuell design-pass.
+- Fri canvas med vilkårlig dragging.
+- Full docking/window manager.
+- Ny generell layoutmotor.
+- Ferdig visuell design.
 
 ## Arkitekturretning
 
-v0.3 skal bevare samme grense som før:
+v0.4 skal utvide den eksisterende command-kontrakten med noen få eksplisitte workspace-operasjoner, ikke introdusere en separat Qt- eller widget-API.
+
+Konseptuelt:
 
 ```text
 User natural language
         |
         v
-Surface input
+Hermes
         |
         v
-Hermes Bridge
-        |
-        +--> Hermes transport
-        |       |
-        |       v
-        |   Hermes / model
-        |       |
-        |       v
-        +<-- raw model output
+Surface command(s)
         |
         v
-output normalisation
+Protocol validation
         |
         v
-Surface Protocol
+Workspace operation
         |
         v
-Dispatcher
-        |
-        v
-Workspace / Blocks / Layout
+Existing workspace state changes
 ```
 
-Hermes skal ikke kjenne Qt eller manipulere widgets direkte. Den skal kun produsere strukturert intent som Surface kan validere og anvende.
+Hermes skal fortsatt ikke manipulere widgets direkte. Den skal kun uttrykke ønsket state-endring gjennom validerte commands.
 
-## Viktig kontrakt
+## Manipulasjonsmodell
 
-`hermes_bridge.py` er adapteren mellom ekstern agent og Surface.
+v0.4 skal bygge videre på eksisterende identitet og ownership:
 
-Konseptuelt:
+- alle blocks/layouts har stabile `id`
+- én visuell parent per node
+- root er gyldig parent
+- layouts eier rekkefølgen på sine children
+- primitive upserts oppdaterer innhold uten å endre plassering
 
-```text
-natural language
-    -> Hermes request
-    -> raw Hermes output
-    -> normalised JSON/commands
-    -> parse_command_list(...)
-    -> list[Command]
-```
+Nye operasjoner bør være små og ortogonale.
 
-Surface-core skal ikke være avhengig av hvordan Hermes startes, hvilken modell Hermes bruker eller hvordan transporten er implementert.
-
-## Eksempel på ønsket flyt
-
-Bruker:
-
-```text
-Vis bøyspenningsformelen og lag et enkelt momentdiagram ved siden av forklaringen.
-```
-
-Hermes kan produsere noe i retning av:
+Konseptuelle eksempler:
 
 ```json
 {
-  "commands": [
-    {
-      "type": "text",
-      "id": "explanation-1",
-      "content": "Bøyspenning beskrives med ..."
-    },
-    {
-      "type": "equation",
-      "id": "eq-1",
-      "latex": "\\sigma = \\frac{My}{I}"
-    },
-    {
-      "type": "plot",
-      "id": "plot-1",
-      "series": [
-        {"x": [0, 1, 2], "y": [0, 1, 0], "label": "M", "kind": "line"}
-      ],
-      "title": "Moment along beam",
-      "xlabel": "x",
-      "ylabel": "M"
-    },
-    {
-      "type": "layout",
-      "id": "study-1",
-      "direction": "horizontal",
-      "children": ["explanation-1", "plot-1"]
-    }
+  "type": "move",
+  "id": "eq-1",
+  "parent": "row-model",
+  "index": 0
+}
+```
+
+```json
+{
+  "type": "move",
+  "id": "plot-1",
+  "parent": null
+}
+```
+
+```json
+{
+  "type": "remove",
+  "id": "hint-1"
+}
+```
+
+Eksakt schema skal avgjøres i implementasjonsplanen. Det viktige er at operasjonene er eksplisitte, validerbare og enkle å anvende atomisk.
+
+## Designspørsmål som skal avklares i implementasjonsplanen
+
+- Skal `move` og `remove` være egne command-typer, eller bør layout-upsert alene uttrykke deler av dette?
+- Trenger vi en egen `reorder`-kommando, eller kan `move(..., index=...)` dekke behovet?
+- Hvordan representeres root som parent på en eksplisitt måte?
+- Hvilke regler gjelder når en layout fjernes: skal children returnere til root eller fjernes rekursivt?
+- Hvordan skal `remove` av en block som brukes i en layout håndteres?
+- Hvordan sikrer vi at en sekvens av manipulasjonskommandoer ikke etterlater workspace i delvis mutert state ved feil?
+- Skal flere operasjoner i én Hermes-response anvendes sekvensielt som i dag, eller trenger enkelte workspace-endringer en liten atomisk batch-grense?
+- Hvordan skal Hermes få nok kunnskap om eksisterende workspace-id-er og struktur til å referere til dem korrekt, uten å sende hele Qt-state?
+- Hva er minste workspace-snapshot som må gis til Hermes for presis manipulasjon?
+- Hvordan unngår vi at protokollen utvikler seg til et generelt imperative UI-språk?
+
+## Viktig nytt behov: workspace context til Hermes
+
+For første gang må Hermes kunne referere til eksisterende state på en pålitelig måte.
+
+v0.4 skal derfor definere en liten, serialiserbar workspace-beskrivelse som kan gis til Hermes, for eksempel:
+
+```json
+{
+  "nodes": [
+    {"id": "problem-1", "type": "text", "parent": "row-1"},
+    {"id": "figure-1", "type": "image", "parent": "row-1"},
+    {"id": "row-1", "type": "layout", "direction": "horizontal", "parent": "study-1"},
+    {"id": "study-1", "type": "layout", "direction": "vertical", "parent": null}
   ]
 }
 ```
 
-Det viktige i v0.3 er ikke at output alltid er perfekt pedagogisk, men at naturlig språk kan drive eksisterende Surface-state gjennom en trygg og tydelig kontrakt.
+Dette skal være Surface-state, ikke Qt-state. Ingen widget-geometri, styling eller interne Qt-objekter skal eksponeres.
 
-## Designspørsmål som skal avklares i implementasjonsplanen
+## Representative manipulasjoner
 
-- Hvilken Hermes-transport er minst kompleks og mest robust for lokal v0.3?
-- Skal Hermes kjøres som subprocess, CLI-kall, lokal HTTP-prosess eller gjennom annen eksisterende mekanisme?
-- Skal Hermes holdes varm mellom requests, eller kan v0.3 bruke ett kall per input?
-- Hvordan instrueres Hermes til å produsere kun gyldige Surface-commands?
-- Skal bridge trekke JSON ut av prose/code fences, eller skal ikke-konform output avvises direkte?
-- Hvor mye normalisering er akseptabelt før bridge begynner å skjule modellfeil?
-- Hvordan skal timeout, prosessfeil og tom output rapporteres til UI uten å blokkere eller krasje vinduet?
-- Må Hermes-kallet kjøres utenfor Qt GUI-tråden for å unngå at vinduet fryser?
-- Hvordan testes bridge uten å kreve et ekte modellkall i hver test?
+Minst disse scenariene skal fungere:
 
-## Eval / representative prompts
-
-Minst disse typene skal prøves:
-
-1. Enkel tekst:
-   - «Forklar hva gradient betyr kort.»
-2. Tekst + ligning:
-   - «Vis bøyspenningsformelen og forklar symbolene.»
-3. Tekst + plot:
-   - «Vis et enkelt trekantformet momentdiagram.»
-4. Flere representasjoner + layout:
-   - «Vis forklaring og figur/plot ved siden av hverandre.»
-5. Uklart eller ikke-renderbart input:
-   - Surface skal håndtere resultatet kontrollert uten crash.
+1. «Flytt ligningen ved siden av plottet.»
+2. «Legg forklaringen over figuren.»
+3. «Flytt plottet tilbake ut av gruppen.»
+4. «Bytt rekkefølge på ligningen og plottet.»
+5. «Fjern hintet.»
+6. «Oppdater forklaringen, men behold plasseringen.»
+7. Ugyldig id, cycle eller allerede ugyldig parent skal avvises kontrollert uten state-korrupsjon.
 
 ## Definition of Done
 
-v0.3 er ferdig når:
+v0.4 er ferdig når:
 
-- En vanlig naturlig språk-prompt kan skrives i Surface og sendes til ekte Hermes.
-- Hermes-output går gjennom `hermes_bridge.py` og eksisterende Surface-protocol før dispatch.
-- Minst én prompt oppretter flere ulike representasjoner og én `layout` uten manuell JSON.
-- Ugyldig eller ufullstendig Hermes-output gir kontrollert feil og krasjer ikke applikasjonen.
-- Hermes-transportfeil eller timeout håndteres kontrollert.
-- UI fryser ikke merkbart under normal Hermes-bruk.
-- Eksisterende primitive commands, `layout`, `--inject` og v0.2-tester fortsetter å fungere.
-- Bridge-/transportlogikk kan testes uten ekte modellkall gjennom fake/mock transport.
-- Det er ikke lagt til nye command-typer eller workspace-manipulasjon bare for å gjøre Hermes enklere å bruke.
+- En eksisterende workspace kan manipuleres uten å bygge hele flaten på nytt.
+- Surface støtter kontrollert flytting/reparenting av eksisterende blocks/layouts.
+- Surface støtter kontrollert endring av rekkefølge i layout.
+- En node kan flyttes tilbake til root.
+- En node kan fjernes med tydelig og dokumentert semantikk.
+- Primitive upserts fortsetter å oppdatere innhold på stedet uten å endre plassering.
+- Ugyldige manipulasjoner avvises uten delvis mutasjon eller tap/duplisering av blocks.
+- Hermes kan referere til eksisterende workspace-id-er gjennom en liten serialisert workspace-beskrivelse, uten tilgang til Qt-state.
+- Minst én naturlig språk-prompt endrer strukturen på en allerede eksisterende studieflate.
+- Alle nye workspace-operasjoner har automatiserte tester.
+- Eksisterende v0.1–v0.3-funksjonalitet fortsetter å fungere.
+- Det er ikke introdusert en generell UI-layoutmotor eller imperative widget-kontroller.
 
 ## Designprinsipper
 
-- Hermes uttrykker intent; Surface eier state og rendering.
-- All modell-output behandles som uvalidert ekstern input.
-- Eksisterende protocol er kontrakten; v0.3 skal primært integrere, ikke redesigne den.
-- Hold transport utskiftbar og isolert fra core.
-- Ikke skjul modellfeil med aggressiv parsing eller heuristikker.
-- Preferer eksplisitt strukturert output fremfor teknisk naturlig språk som må tolkes senere.
-- Bygg akkurat nok agentintegrasjon til å gjøre Surface naturlig å bruke.
-- Generaliser etter observerte behov, ikke før.
+- Surface eier state; Hermes uttrykker bare ønsket state-endring.
+- Identitet (`id`) er grunnlaget for all manipulasjon.
+- Workspace-context til Hermes skal beskrive semantisk state, ikke Qt-internals.
+- Nye operasjoner skal være få, eksplisitte og ortogonale.
+- Foretrekk deklarative state-endringer fremfor tekniske UI-instruksjoner.
+- Ingen delvis mutasjon ved avviste commands.
+- Behold én visuell parent per node.
+- Ikke generaliser til fri canvas eller generell widget-kontroll før konkrete behov krever det.
+- v0.4 skal kun bygge infrastrukturen som trengs for at en senere versjon kan sette opp og videreutvikle ekte oppgaver på Surface.

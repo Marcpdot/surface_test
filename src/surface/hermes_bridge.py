@@ -64,12 +64,15 @@ class HermesBridge:
         text: str,
         transport: HermesTransport,
         workspace_snapshot: Mapping[str, object] | None = None,
+        study_context: Mapping[str, object] | None = None,
     ) -> list[Command]:
         """Send natural language to Hermes, then parse via from_hermes_output."""
         stripped = text.strip()
         if not stripped:
             raise ProtocolError("empty_field", "empty input")
-        raw = transport.complete(build_prompt(stripped, workspace_snapshot))
+        raw = transport.complete(
+            build_prompt(stripped, workspace_snapshot, study_context)
+        )
         unwrapped = unwrap_model_output(raw)
         try:
             if not unwrapped:
@@ -95,7 +98,12 @@ class HermesBridge:
             {
                 "type": "text",
                 "id": "problem-1",
-                "content": "## Bending stress\nFind $\\sigma$ for the beam.",
+                "content": (
+                    "## Bending stress\nA rectangular beam section has width "
+                    "$b=50\\,\\mathrm{mm}$, height $h=100\\,\\mathrm{mm}$, and bending "
+                    "moment $M=5\\,\\mathrm{kN\\,m}$. Find the maximum bending stress. "
+                    "Use $I=bh^3/12$ and consistent units."
+                ),
                 "format": "markdown",
             },
             {

@@ -41,12 +41,48 @@ Example:
 def build_prompt(
     user_text: str,
     workspace_snapshot: Mapping[str, object] | None = None,
+    study_context: Mapping[str, object] | None = None,
 ) -> str:
     snapshot = {"nodes": []} if workspace_snapshot is None else workspace_snapshot
     serialized = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
+    study_section = ""
+    if study_context is not None:
+        study = study_context.get("study")
+        mode = study.get("mode") if isinstance(study, Mapping) else None
+        serialized_study = json.dumps(
+            study_context, ensure_ascii=False, separators=(",", ":")
+        )
+        study_section = (
+            "Study turn (Surface-controlled; obey exactly):\n"
+            f"{serialized_study}\n"
+            f"Study policy: {_study_policy(mode)}\n"
+            "Return exactly the one text command described by study.response. "
+            "Do not add, move, remove, or update any other id.\n\n"
+        )
     return (
         f"{PROTOCOL_CARD.rstrip()}\n\n"
         f"Current workspace (Surface semantic state; no Qt):\n{serialized}\n\n"
+        f"{study_section}"
         f"User:\n{user_text.strip()}\n\n"
         "JSON only. No markdown fences. First character { or [.\n"
     )
+
+
+def _study_policy(mode: object) -> str:
+    if mode == "hint_only":
+        return "Give one short direction or reminder only. No derivation and no final answer."
+    if mode == "check_attempt":
+        return (
+            "Assess the supplied attempt briefly. State what is right or wrong and give at "
+            "most one corrective hint. Do not continue the solution."
+        )
+    if mode == "next_step":
+        return "Give exactly one next derivation or action. Do not give later steps or the final answer."
+    if mode == "show_solution":
+        return "The user explicitly requested it; give the complete solution with reasoning."
+    if mode == "new_variant":
+        return (
+            "Change the numerical values while preserving the same problem type, method, and "
+            "difficulty. Return only the revised problem text."
+        )
+    return "The study mode is invalid; do not generate a response."

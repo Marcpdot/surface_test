@@ -12,6 +12,11 @@ v0.4: window tar et workspace-snapshot på GUI-tråden før Hermes-worker starte
 alle returnerte command-lister anvendes atomisk. Manuell smoke: åpne `--demo`, send
 «Flytt ligningen før plottet i modellraden», og kontroller at eksisterende blocks flyttes.
 
+v0.5: window eier én `StudySession` og en eventuell pending `StudyTurn`. Study-context
+tas på GUI-tråden, Hermes kjører fortsatt i worker, response-policy valideres ved retur,
+og session-state committes bare etter vellykket atomisk workspace-dispatch. `--demo`
+har en selvstendig talloppgave for hint → attempt → feedback → next-step → solution.
+
 **Hvorfor er den bygget slik?**  
 Den fungerer som Qt-grensen der UI-events møter den Qt-frie kjernen.
 

@@ -74,6 +74,42 @@ def test_prompt_defaults_to_empty_workspace() -> None:
     assert 'Current workspace (Surface semantic state; no Qt):\n{"nodes":[]}' in prompt
 
 
+def test_study_context_adds_mode_policy_and_exact_response_contract() -> None:
+    context = {
+        "study": {
+            "mode": "hint_only",
+            "target_id": "problem-1",
+            "problem": {"id": "problem-1", "type": "text", "content": "Find x"},
+            "response": {"type": "text", "id": "hint-1", "max_chars": 600},
+        }
+    }
+    transport = FakeTransport(
+        output='{"type":"text","id":"hint-1","content":"Draw a free-body diagram."}'
+    )
+    commands = HermesBridge().complete(
+        "bare et hint", transport, {"nodes": []}, context
+    )
+    assert commands == [
+        TextCommand(
+            type="text",
+            id="hint-1",
+            content="Draw a free-body diagram.",
+            format="markdown",
+        )
+    ]
+    prompt = transport.prompts[0]
+    assert "Study turn (Surface-controlled; obey exactly)" in prompt
+    assert '"mode":"hint_only"' in prompt
+    assert '"id":"hint-1"' in prompt
+    assert "No derivation and no final answer" in prompt
+
+
+def test_ordinary_prompt_has_no_study_policy() -> None:
+    prompt = build_prompt("Flytt plottet", {"nodes": []})
+    assert "Study turn" not in prompt
+    assert "Study policy" not in prompt
+
+
 def test_prompt_requires_bare_json() -> None:
     prompt = build_prompt("Vis F = ma")
     assert "Do not wrap the JSON in ``` or ```json fences." in prompt

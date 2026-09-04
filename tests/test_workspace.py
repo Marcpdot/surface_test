@@ -16,6 +16,7 @@ from surface.protocol import (
     RemoveCommand,
     TextCommand,
 )
+from surface.study import StudySession
 from surface.workspace import Workspace
 
 
@@ -107,5 +108,43 @@ def test_remove_then_recreate_id_with_new_type_replaces_widget(app: QApplication
     )
     assert workspace._blocks["node"] is not old_widget
     assert workspace.get("node").type == "equation"  # type: ignore[union-attr]
+    workspace.deleteLater()
+    app.processEvents()
+
+
+def test_study_variant_updates_problem_in_place_and_cleans_slots(
+    app: QApplication,
+) -> None:
+    workspace = Workspace()
+    workspace.apply_many(
+        [
+            TextCommand(type="text", id="problem-1", content="Old values"),
+            TextCommand(type="text", id="hint-1", content="Old hint"),
+            LayoutCommand(
+                type="layout",
+                id="study",
+                direction="vertical",
+                children=("problem-1",),
+            ),
+        ]
+    )
+    problem_widget = workspace._blocks["problem-1"]
+    layout_widget = workspace._blocks["study"]
+    session = StudySession()
+    turn = session.prepare("Lag en ny variant med andre tall", workspace)
+    assert turn is not None
+    commands = session.finalize(
+        turn,
+        [TextCommand(type="text", id="problem-1", content="New values")],
+        workspace,
+    )
+    workspace.apply_many(commands)
+    session.commit(turn)
+
+    assert workspace._blocks["problem-1"] is problem_widget
+    assert workspace._blocks["study"] is layout_widget
+    assert workspace.get("hint-1") is None
+    assert workspace.get("problem-1").content == "New values"  # type: ignore[union-attr]
+    assert workspace.snapshot()["nodes"][0]["parent"] == "study"  # type: ignore[index]
     workspace.deleteLater()
     app.processEvents()

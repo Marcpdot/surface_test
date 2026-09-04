@@ -14,5 +14,9 @@ Prompting er ikke et andre protocol. Validering skjer fortsatt i `protocol.py`.
 v0.4: prompten beskriver `move`/`remove` og inkluderer et kompakt serialisert
 workspace-snapshot. Snapshotet inneholder ingen block-content, filstier eller Qt-state.
 
+v0.5: `build_prompt` kan i tillegg få en liten study-context med valgt problem,
+interaction-mode, relevant tidligere respons og eksakt tillatt response-slot. En
+mode-spesifikk policy begrenser hint, feedback og neste steg; vanlig prompt er uendret.
+
 **Naturlig videre utvikling**
 Juster kortet når ekte Hermes-økter viser typiske feil; ikke utvid command-skjemaet for modellens skyld.

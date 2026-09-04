@@ -19,6 +19,7 @@ from surface.dispatcher import Dispatcher, DispatchResult
 from surface.hermes_bridge import HermesBridge, is_structured_input
 from surface.hermes_transport import HermesTransport, transport_from_env
 from surface.protocol import Command, ProtocolError
+from surface.study import StudyError, StudySession, StudyTurn
 from surface.workspace import Workspace
 
 _TITLE_BAR_HEIGHT = 32
@@ -92,17 +93,22 @@ class _HermesThread(QThread):
         transport: HermesTransport,
         text: str,
         workspace_snapshot: dict[str, object],
+        study_context: dict[str, object] | None,
     ) -> None:
         super().__init__()
         self._bridge = bridge
         self._transport = transport
         self._text = text
         self._workspace_snapshot = workspace_snapshot
+        self._study_context = study_context
 
     def run(self) -> None:
         try:
             commands = self._bridge.complete(
-                self._text, self._transport, self._workspace_snapshot
+                self._text,
+                self._transport,
+                self._workspace_snapshot,
+                self._study_context,
             )
         except Exception as exc:
             self.failed.emit(exc)
@@ -123,9 +129,11 @@ class SurfaceWindow(QWidget):
         self._workspace = Workspace(self)
         self._dispatcher = Dispatcher(self._workspace)
         self._bridge = HermesBridge()
+        self._study = StudySession()
         self._transport = transport_from_env()
         self._busy = False
         self._hermes_thread: _HermesThread | None = None
+        self._pending_study_turn: StudyTurn | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -174,11 +182,21 @@ class SurfaceWindow(QWidget):
                 ProtocolError("hermes_unavailable", "Hermes is not configured")
             )
             return
+        try:
+            study_turn = self._study.prepare(text, self._workspace)
+        except StudyError as exc:
+            self._set_study_error(exc)
+            return
         self._set_busy(True)
         self._status.setText("waiting…")
         snapshot = self._workspace.snapshot()
+        self._pending_study_turn = study_turn
         thread = _HermesThread(
-            self._bridge, self._transport, text.strip(), snapshot
+            self._bridge,
+            self._transport,
+            text.strip(),
+            snapshot,
+            study_turn.prompt_context if study_turn is not None else None,
         )
         thread.succeeded.connect(self._on_hermes_ok)
         thread.failed.connect(self._on_hermes_fail)
@@ -198,7 +216,26 @@ class SurfaceWindow(QWidget):
         self._set_busy(False)
         self._hermes_thread = None
         if not isinstance(commands, list):
+            self._pending_study_turn = None
             self._set_internal_error(TypeError("Hermes result is not a command list"))
+            return
+        study_turn = self._pending_study_turn
+        self._pending_study_turn = None
+        if study_turn is not None:
+            try:
+                commands = self._study.finalize(
+                    study_turn, commands, self._workspace
+                )
+            except StudyError as exc:
+                self._set_study_error(exc)
+                return
+            if self.apply_commands(commands):
+                try:
+                    self._study.commit(study_turn)
+                except StudyError as exc:
+                    self._set_internal_error(exc)
+                    return
+                self._input.clear()
             return
         self._input.clear()
         self.apply_commands(commands)
@@ -206,6 +243,7 @@ class SurfaceWindow(QWidget):
     def _on_hermes_fail(self, exc: object) -> None:
         self._set_busy(False)
         self._hermes_thread = None
+        self._pending_study_turn = None
         if isinstance(exc, ProtocolError):
             self._set_status_error(exc)
         elif isinstance(exc, BaseException):
@@ -238,16 +276,22 @@ class SurfaceWindow(QWidget):
             raise OSError(f"could not write {path}")
         return path
 
-    def apply_commands(self, commands: list[Command]) -> None:
+    def apply_commands(self, commands: list[Command]) -> bool:
         try:
             results = self._dispatcher.dispatch_many(commands)
             self._set_status_from_results(results)
+            return bool(results) and all(result.ok for result in results)
         except Exception as exc:
             self._set_internal_error(exc)
+            return False
 
     def _set_status_error(self, exc: ProtocolError) -> None:
         self._status.setText(f"{exc.code}: {exc.message}")
         logging.getLogger("surface").warning("%s %s", exc.code, exc.command_id)
+
+    def _set_study_error(self, exc: StudyError) -> None:
+        self._status.setText(f"{exc.code}: {exc.message}")
+        logging.getLogger("surface.study").warning("%s", exc.code)
 
     def _set_internal_error(self, exc: BaseException) -> None:
         logging.getLogger("surface").exception("internal_error")

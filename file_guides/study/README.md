@@ -14,7 +14,7 @@ eventuelle deterministiske attempt-/cleanup-commands. `commit` kalles først ett
 vellykket atomisk workspace-dispatch.
 
 Study-contexten angir også en eksplisitt maksimal responslengde, inkludert
-`solution-1`. Transportgrensen lager en `TextCommand` fra den faste study-markøren,
+`solution-1`. Transportgrensen lager en `TextCommand` direkte fra hele Hermes stdout,
 mens `finalize` fortsatt er autoriteten som kontrollerer type, id, lengde og stale turn.
 
 **Hvorfor er den bygget slik?**  

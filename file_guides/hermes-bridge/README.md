@@ -8,7 +8,7 @@ Er adapteren mellom rå ekstern tekst/JSON og Surface-protokollen.
 **Hvordan går data inn og ut?**  
 `from_hermes_output` / `from_user_input` tar kun strukturert JSON (`{`/`[`). Naturlig
 språk går via `complete(text, transport)`. Ordinære svar bruker den strenge JSON-veien;
-kontrollerte study-svar bruker bare den faste study-markøren. Ved parse-feil etter
+for kontrollerte study-svar blir hele stdout verbatim tekstinnhold. Ved parse-feil etter
 transport logges rå Hermes-stdout. Ingen JSON-fisking eller generell reparasjon i prosa.
 
 **Hvorfor er den bygget slik?**  
@@ -18,9 +18,8 @@ v0.4: `complete` mottar det semantiske workspace-snapshotet og gir det videre ti
 promptbyggeren. Parsing og transport er ellers uendret.
 
 v0.5: `complete` kan motta en separat study-context. Vanlige Hermes-svar går fortsatt
-strengt gjennom `parse_command_list`/`json.loads`. For en kontrollert study-turn godtar
-broen bare den eksakte `SURFACE_STUDY_RESPONSE\ncontent:\n`-markøren og behandler resten
-som verbatim tekst. Response-id og lengdegrense hentes fra Surface sin study-context;
+strengt gjennom `parse_command_list`/`json.loads`. For en kontrollert study-turn blir
+hele Hermes stdout behandlet som verbatim tekst. Response-id og lengdegrense hentes fra Surface sin study-context;
 Hermes kan ikke velge type eller id. Den ferdige `TextCommand` valideres fortsatt mot
 den aktuelle `StudyTurn` i `StudySession.finalize`.
 

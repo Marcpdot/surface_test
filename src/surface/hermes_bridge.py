@@ -6,7 +6,7 @@ import logging
 import re
 from collections.abc import Mapping
 
-from surface.hermes_prompt import STUDY_RESPONSE_PREFIX, build_prompt
+from surface.hermes_prompt import build_prompt
 from surface.hermes_transport import HermesTransport
 from surface.protocol import (
     ID_PATTERN,
@@ -82,7 +82,7 @@ class HermesBridge:
         )
         try:
             if study_context is not None:
-                return _parse_study_response(raw, study_context)
+                return _build_study_command(raw, study_context)
             unwrapped = unwrap_model_output(raw)
             if not unwrapped:
                 raise ProtocolError(
@@ -167,26 +167,20 @@ class HermesBridge:
         return json.dumps(payload)
 
 
-def _parse_study_response(
+def _build_study_command(
     output: str, study_context: Mapping[str, object]
 ) -> list[Command]:
     response_id, max_chars = _study_response_contract(study_context)
-    if not output.startswith(STUDY_RESPONSE_PREFIX):
-        raise ProtocolError(
-            "invalid_study_response",
-            "study response is missing the exact Surface study marker",
-        )
-    content = output[len(STUDY_RESPONSE_PREFIX) :]
-    if not content.strip():
+    if not output.strip():
         raise ProtocolError("invalid_study_response", "study response content is empty")
-    if len(content) > max_chars:
+    if len(output) > max_chars:
         raise ProtocolError(
             "limit_exceeded",
             f"study response exceeds {max_chars} characters",
             command_id=response_id,
         )
     return [
-        TextCommand(type="text", id=response_id, content=content, format="markdown")
+        TextCommand(type="text", id=response_id, content=output, format="markdown")
     ]
 
 

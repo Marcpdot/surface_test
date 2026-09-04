@@ -332,16 +332,14 @@ def test_fake_hermes_multi_round_study_loop() -> None:
     rounds = [
         (
             "Gi meg bare et hint",
-            "SURFACE_STUDY_RESPONSE\ncontent:\nStart with I=bh^3/12.",
+            "Start with I=bh^3/12.",
         ),
         (
             "Jeg fikk 60 MPa. Er det riktig?",
-            "SURFACE_STUDY_RESPONSE\ncontent:\n"
             "Yes. Your unit conversion and result are correct.",
         ),
         (
             "Vis ett neste steg, men ikke løs resten",
-            "SURFACE_STUDY_RESPONSE\ncontent:\n"
             "Substitute b and h into I=bh^3/12.",
         ),
     ]
@@ -368,8 +366,7 @@ def test_fake_hermes_multi_round_study_loop() -> None:
     solution_commands = bridge.complete(
         solution_text,
         FakeTransport(
-            output="SURFACE_STUDY_RESPONSE\ncontent:\n"
-            "Compute I, use y=h/2, then sigma=My/I=60 MPa."
+            output="Compute I, use y=h/2, then sigma=My/I=60 MPa."
         ),
         workspace.snapshot(),
         solution_turn.prompt_context,

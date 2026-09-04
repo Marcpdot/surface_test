@@ -85,7 +85,7 @@ def test_study_context_adds_mode_policy_and_exact_response_contract() -> None:
         }
     }
     transport = FakeTransport(
-        output="SURFACE_STUDY_RESPONSE\ncontent:\nDraw a free-body diagram."
+        output="Draw a free-body diagram."
     )
     commands = HermesBridge().complete(
         "bare et hint", transport, {"nodes": []}, context
@@ -104,7 +104,7 @@ def test_study_context_adds_mode_policy_and_exact_response_contract() -> None:
     assert '"id":"hint-1"' in prompt
     assert "No derivation and no final answer" in prompt
     assert "Do not output JSON, a command type, an id" in prompt
-    assert prompt.endswith("SURFACE_STUDY_RESPONSE\ncontent:\n")
+    assert "The entire stdout becomes verbatim response content" in prompt
     assert "JSON only. No markdown fences." not in prompt
 
 
@@ -116,7 +116,7 @@ def test_study_context_adds_mode_policy_and_exact_response_contract() -> None:
         ("next_step", "step-1", "Now substitute the known values.", 1_200),
     ],
 )
-def test_study_envelope_assigns_controlled_response_slots(
+def test_study_stdout_assigns_controlled_response_slots(
     mode: str, response_id: str, content: str, max_chars: int
 ) -> None:
     context = {
@@ -132,7 +132,7 @@ def test_study_envelope_assigns_controlled_response_slots(
 
     commands = HermesBridge().complete(
         "study request",
-        FakeTransport(output=f"SURFACE_STUDY_RESPONSE\ncontent:\n{content}"),
+        FakeTransport(output=content),
         {"nodes": []},
         context,
     )
@@ -142,7 +142,7 @@ def test_study_envelope_assigns_controlled_response_slots(
     ]
 
 
-def test_study_envelope_preserves_long_solution_verbatim() -> None:
+def test_study_stdout_preserves_long_solution_verbatim() -> None:
     derivation = "\n".join(
         f"{number}. Likevekt og geometri gir "
         + r"\sigma = \frac{My}{I}"
@@ -170,7 +170,7 @@ def test_study_envelope_preserves_long_solution_verbatim() -> None:
 
     commands = HermesBridge().complete(
         "Vis hele løsningen",
-        FakeTransport(output=f"SURFACE_STUDY_RESPONSE\ncontent:\n{content}"),
+        FakeTransport(output=content),
         {"nodes": []},
         context,
     )
@@ -182,7 +182,7 @@ def test_study_envelope_preserves_long_solution_verbatim() -> None:
     ]
 
 
-def test_study_envelope_rejects_oversized_content() -> None:
+def test_study_stdout_rejects_oversized_content() -> None:
     context = {
         "study": {
             "mode": "hint_only",
@@ -192,23 +192,15 @@ def test_study_envelope_rejects_oversized_content() -> None:
     with pytest.raises(ProtocolError) as exc_info:
         HermesBridge().complete(
             "hint",
-            FakeTransport(output="SURFACE_STUDY_RESPONSE\ncontent:\n123456"),
+            FakeTransport(output="123456"),
             {"nodes": []},
             context,
         )
     assert exc_info.value.code == "limit_exceeded"
 
 
-@pytest.mark.parametrize(
-    "output",
-    [
-        "content:\nmissing marker",
-        "SURFACE_STUDY_RESPONSE\nmissing-content-marker",
-        "SURFACE_STUDY_RESPONSE\ncontent:\n",
-        '{"type":"text","id":"hint-1","content":"old JSON shape"}',
-    ],
-)
-def test_study_envelope_rejects_missing_or_malformed_marker(output: str) -> None:
+@pytest.mark.parametrize("output", ["", " ", "\n\t\n"])
+def test_study_stdout_rejects_empty_content(output: str) -> None:
     context = {
         "study": {
             "mode": "hint_only",
@@ -222,11 +214,11 @@ def test_study_envelope_rejects_missing_or_malformed_marker(output: str) -> None
     assert exc_info.value.code == "invalid_study_response"
 
 
-def test_study_envelope_is_not_accepted_by_ordinary_hermes_path() -> None:
+def test_plain_stdout_is_not_accepted_by_ordinary_hermes_path() -> None:
     with pytest.raises(ProtocolError) as exc_info:
         HermesBridge().complete(
             "ordinary request",
-            FakeTransport(output="SURFACE_STUDY_RESPONSE\ncontent:\ntext"),
+            FakeTransport(output="plain pedagogical text"),
         )
     assert exc_info.value.code == "cannot_translate"
 

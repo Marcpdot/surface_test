@@ -2,8 +2,6 @@
 import json
 from collections.abc import Mapping
 
-STUDY_RESPONSE_PREFIX = "SURFACE_STUDY_RESPONSE\ncontent:\n"
-
 PROTOCOL_CARD = """\
 You output Surface commands as JSON only. No Qt. No widget instructions.
 
@@ -81,17 +79,16 @@ def _build_study_prompt(
     )
     return (
         "Produce pedagogical text for a Surface-controlled study turn.\n"
+        "Return only the pedagogical response as plain stdout.\n"
         "Do not output JSON, a command type, an id, or a markdown fence.\n"
-        "Return exactly this fixed envelope, with no text before the marker:\n"
-        f"{STUDY_RESPONSE_PREFIX}<pedagogical content>\n\n"
-        "Everything after the content marker is verbatim response content. Normal "
+        "The entire stdout becomes verbatim response content. Normal "
         "Unicode, Markdown, literal line breaks, and LaTeX backslashes are allowed.\n\n"
         f"Current workspace (Surface semantic state; no Qt):\n{serialized_workspace}\n\n"
         "Study turn (Surface-controlled; obey exactly):\n"
         f"{serialized_study}\n"
         f"Study policy: {_study_policy(mode)}\n\n"
         f"User:\n{user_text.strip()}\n\n"
-        f"{STUDY_RESPONSE_PREFIX}"
+        "Pedagogical response only:\n"
     )
 
 

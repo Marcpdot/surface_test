@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol as TypingProtocol
 
+from surface.composition import CompositionError
 from surface.protocol import Command
 
 
@@ -69,6 +70,10 @@ class Dispatcher:
         except UnknownBlockError as exc:
             return DispatchResult(
                 False, None, exc.command_id, exc.command_type, "unknown_block", str(exc)
+            )
+        except CompositionError as exc:
+            return DispatchResult(
+                False, None, exc.command_id, command.type, exc.code, str(exc)
             )
 
     def dispatch_many(self, commands: list[Command]) -> list[DispatchResult]:

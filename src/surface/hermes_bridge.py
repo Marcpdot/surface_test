@@ -48,17 +48,46 @@ class HermesBridge:
         payload = [
             {
                 "type": "text",
-                "id": "demo-text",
-                "content": "## Surface demo",
+                "id": "problem-1",
+                "content": "## Bending stress\nFind $\\sigma$ for the beam.",
                 "format": "markdown",
             },
-            {"type": "equation", "id": "demo-eq", "latex": r"\sigma = \frac{My}{I}"},
-            {"type": "image", "id": "demo-img", "source": image_source, "alt": "demo"},
+            {
+                "type": "image",
+                "id": "figure-1",
+                "source": image_source,
+                "alt": "beam diagram",
+            },
+            {
+                "type": "equation",
+                "id": "equation-1",
+                "latex": r"\sigma = \frac{My}{I}",
+            },
             {
                 "type": "plot",
-                "id": "demo-plot",
-                "title": "demo",
+                "id": "plot-1",
+                "title": "Moment along beam",
+                "xlabel": "x",
+                "ylabel": "M",
                 "series": [{"x": [0, 1, 2], "y": [0, 1, 0], "kind": "line"}],
+            },
+            {
+                "type": "layout",
+                "id": "row-problem",
+                "direction": "horizontal",
+                "children": ["problem-1", "figure-1"],
+            },
+            {
+                "type": "layout",
+                "id": "row-model",
+                "direction": "horizontal",
+                "children": ["equation-1", "plot-1"],
+            },
+            {
+                "type": "layout",
+                "id": "study-1",
+                "direction": "vertical",
+                "children": ["row-problem", "row-model"],
             },
         ]
         return json.dumps(payload)

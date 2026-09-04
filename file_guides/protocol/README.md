@@ -9,5 +9,7 @@ Rå JSON/dicts går inn i `parse_command` / `parse_command_list`; validerte `Com
 **Hvorfor er den bygget slik?**  
 Systemgrensen trenger en liten, eksplisitt kontrakt som skiller rå input fra data resten av Surface kan stole på.
 
+v0.2: `layout` er en command med `direction` (`vertical` | `horizontal`) og `children` (block-id-er). Nesting skjer ved at en layout refererer andre layout-id-er. Ukjente felter avvises.
+
 **Naturlig videre utvikling**  
 Utforsk type systems, grammars, algebraic data types, schemas og compositional interfaces før protocolen eventuelt generaliseres.

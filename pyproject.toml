@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "surface"
-version = "0.1.0"
-description = "Borderless PySide6 workspace for text, equations, images, and plots."
+version = "0.2.0"
+description = "Borderless PySide6 workspace for text, equations, images, plots, and layout."
 requires-python = ">=3.11"
 dependencies = [
     "PySide6>=6.6,<7",

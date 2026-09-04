@@ -2,6 +2,7 @@ from typing import Literal
 
 import pytest
 
+from surface.composition import apply_layout_parents
 from surface.dispatcher import (
     Dispatcher,
     DispatchResult,
@@ -13,6 +14,7 @@ from surface.protocol import (
     Command,
     EquationCommand,
     ImageCommand,
+    LayoutCommand,
     PlotCommand,
     Series,
     TextCommand,
@@ -22,14 +24,26 @@ from surface.protocol import (
 class FakeWorkspace:
     def __init__(self) -> None:
         self.commands: dict[str, Command] = {}
+        self.parent_of: dict[str, str | None] = {}
 
     def upsert(self, command: Command) -> Literal["created", "updated"]:
         existing = self.commands.get(command.id)
+        if existing is not None and existing.type != command.type:
+            raise TypeMismatchError(command.id, existing.type, command.type)
+        if isinstance(command, LayoutCommand):
+            next_parents = apply_layout_parents(
+                command.id,
+                command.children,
+                known_ids=frozenset(self.commands),
+                parent_of=self.parent_of,
+            )
+            self.parent_of = next_parents
+            self.parent_of.setdefault(command.id, None)
         if existing is None:
             self.commands[command.id] = command
+            if command.id not in self.parent_of:
+                self.parent_of[command.id] = None
             return "created"
-        if existing.type != command.type:
-            raise TypeMismatchError(command.id, existing.type, command.type)
         self.commands[command.id] = command
         return "updated"
 
@@ -240,6 +254,15 @@ def test_plot_created_then_updated() -> None:
             ),
             TextCommand(type="text", id="x", content="hello"),
         ),
+        (
+            TextCommand(type="text", id="x", content="hello"),
+            LayoutCommand(
+                type="layout",
+                id="x",
+                direction="vertical",
+                children=("a-1",),
+            ),
+        ),
     ],
 )
 def test_type_mismatch_reports_new_type(
@@ -317,3 +340,117 @@ def test_hermes_bridge_dispatch_many_chain() -> None:
         )
     ]
     assert workspace.get("h-1") == commands[0]
+
+
+def test_layout_created_then_updated() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    dispatcher.dispatch(TextCommand(type="text", id="problem-1", content="p"))
+    dispatcher.dispatch(TextCommand(type="text", id="figure-1", content="f"))
+    created = dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-problem",
+            direction="horizontal",
+            children=("problem-1", "figure-1"),
+        )
+    )
+    assert created.ok is True
+    assert created.action == "created"
+    assert created.command_type == "layout"
+    assert workspace.parent_of["problem-1"] == "row-problem"
+
+    dispatcher.dispatch(TextCommand(type="text", id="extra-1", content="e"))
+    updated = dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-problem",
+            direction="vertical",
+            children=("problem-1",),
+        )
+    )
+    assert updated.ok is True
+    assert updated.action == "updated"
+    assert workspace.parent_of["problem-1"] == "row-problem"
+    assert workspace.parent_of["figure-1"] is None
+
+
+def test_layout_unknown_child() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    result = dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-1",
+            direction="horizontal",
+            children=("missing-1",),
+        )
+    )
+    assert result.ok is False
+    assert result.error_code == "unknown_child"
+    assert result.command_id == "row-1"
+    assert result.command_type == "layout"
+    assert workspace.get("row-1") is None
+
+
+def test_layout_already_composed() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    dispatcher.dispatch(TextCommand(type="text", id="figure-1", content="f"))
+    dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-a",
+            direction="horizontal",
+            children=("figure-1",),
+        )
+    )
+    result = dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-b",
+            direction="horizontal",
+            children=("figure-1",),
+        )
+    )
+    assert result.ok is False
+    assert result.error_code == "already_composed"
+    assert workspace.get("row-b") is None
+    assert workspace.parent_of["figure-1"] == "row-a"
+
+
+def test_demo_output_dispatches_study_layout() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    raw = HermesBridge.demo_output(image_source="demo.png")
+    commands = HermesBridge().from_hermes_output(raw)
+    results = dispatcher.dispatch_many(commands)
+    assert all(result.ok for result in results)
+    assert [c.type for c in commands] == [
+        "text",
+        "image",
+        "equation",
+        "plot",
+        "layout",
+        "layout",
+        "layout",
+    ]
+    assert workspace.parent_of["problem-1"] == "row-problem"
+    assert workspace.parent_of["row-problem"] == "study-1"
+
+
+def test_layout_unknown_child_does_not_mutate() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    dispatcher.dispatch(TextCommand(type="text", id="a", content="a"))
+    result = dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-1",
+            direction="horizontal",
+            children=("a", "missing"),
+        )
+    )
+    assert result.ok is False
+    assert workspace.parent_of.get("a") is None
+    assert "row-1" not in workspace.commands

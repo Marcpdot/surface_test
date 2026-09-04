@@ -6,9 +6,11 @@ import pytest
 from surface.hermes_bridge import HermesBridge
 from surface.image_source import interpret_image_source, resolve_image_file
 from surface.protocol import (
+    MAX_CHILDREN,
     MAX_TEXT_LENGTH,
     EquationCommand,
     ImageCommand,
+    LayoutCommand,
     PlotCommand,
     ProtocolError,
     Series,
@@ -566,6 +568,103 @@ def test_from_user_input_empty_prose_rejected() -> None:
     with pytest.raises(ProtocolError) as exc_info:
         HermesBridge().from_user_input("   ", text_id="user-1")
     assert exc_info.value.code == "empty_field"
+
+
+LAYOUT = {
+    "type": "layout",
+    "id": "row-problem",
+    "direction": "horizontal",
+    "children": ["problem-1", "figure-1"],
+}
+
+
+def test_valid_layout_horizontal() -> None:
+    command = parse_command(LAYOUT)
+    assert command == LayoutCommand(
+        type="layout",
+        id="row-problem",
+        direction="horizontal",
+        children=("problem-1", "figure-1"),
+    )
+
+
+def test_valid_layout_vertical() -> None:
+    command = parse_command(
+        {
+            "type": "layout",
+            "id": "study-1",
+            "direction": "vertical",
+            "children": ["row-problem", "row-model"],
+        }
+    )
+    assert command.direction == "vertical"
+    assert command.children == ("row-problem", "row-model")
+
+
+def test_parse_command_list_primitives_then_layouts() -> None:
+    commands = parse_command_list(
+        [
+            TEXT,
+            IMAGE,
+            LAYOUT,
+        ]
+    )
+    assert [c.type for c in commands] == ["text", "image", "layout"]
+    assert isinstance(commands[2], LayoutCommand)
+
+
+def test_layout_unknown_field() -> None:
+    error = _error({**LAYOUT, "stretch": 1})
+    assert error.code == "unknown_field"
+
+
+def test_layout_bad_direction() -> None:
+    error = _error({**LAYOUT, "direction": "grid"})
+    assert error.code == "invalid_field"
+
+
+def test_layout_missing_children() -> None:
+    error = _error({"type": "layout", "id": "row-1", "direction": "horizontal"})
+    assert error.code == "missing_field"
+
+
+def test_layout_empty_children() -> None:
+    error = _error({**LAYOUT, "children": []})
+    assert error.code == "empty_field"
+
+
+def test_layout_duplicate_children() -> None:
+    error = _error({**LAYOUT, "children": ["a-1", "a-1"]})
+    assert error.code == "duplicate_child"
+
+
+def test_layout_nested_object_child_rejected() -> None:
+    error = _error(
+        {
+            "type": "layout",
+            "id": "study-1",
+            "direction": "vertical",
+            "children": [{"direction": "horizontal", "children": ["a-1"]}],
+        }
+    )
+    assert error.code == "invalid_field"
+
+
+def test_layout_invalid_child_id() -> None:
+    error = _error({**LAYOUT, "children": ["bad id"]})
+    assert error.code == "invalid_id"
+
+
+def test_layout_too_many_children() -> None:
+    kids = [f"c-{i}" for i in range(MAX_CHILDREN + 1)]
+    error = _error({**LAYOUT, "children": kids})
+    assert error.code == "limit_exceeded"
+
+
+def test_layout_max_children_ok() -> None:
+    kids = [f"c-{i}" for i in range(MAX_CHILDREN)]
+    command = parse_command({**LAYOUT, "children": kids})
+    assert len(command.children) == MAX_CHILDREN
 
 
 def test_from_user_input_json_ignores_text_id() -> None:

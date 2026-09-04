@@ -7,10 +7,11 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal, Union
 
-CommandType = Literal["text", "equation", "image", "plot"]
+CommandType = Literal["text", "equation", "image", "plot", "layout"]
 TextFormat = Literal["markdown", "plain"]
 EquationDisplay = Literal["block", "inline"]
 SeriesKind = Literal["line", "scatter", "bar"]
+LayoutDirection = Literal["vertical", "horizontal"]
 
 MAX_ID_LENGTH = 64
 MAX_TEXT_LENGTH = 50_000
@@ -18,6 +19,7 @@ MAX_LATEX_LENGTH = 5_000
 MAX_ALT_LENGTH = 500
 MAX_SERIES = 8
 MAX_POINTS = 10_000
+MAX_CHILDREN = 8
 ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 
 _ID_RE = re.compile(ID_PATTERN)
@@ -28,12 +30,14 @@ _TEXT_FIELDS = frozenset({"type", "id", "content", "format"})
 _EQUATION_FIELDS = frozenset({"type", "id", "latex", "display"})
 _IMAGE_FIELDS = frozenset({"type", "id", "source", "alt"})
 _PLOT_FIELDS = frozenset({"type", "id", "series", "title", "xlabel", "ylabel"})
+_LAYOUT_FIELDS = frozenset({"type", "id", "direction", "children"})
 _SERIES_FIELDS = frozenset({"x", "y", "label", "kind"})
 _ALLOWED_FIELDS = {
     "text": _TEXT_FIELDS,
     "equation": _EQUATION_FIELDS,
     "image": _IMAGE_FIELDS,
     "plot": _PLOT_FIELDS,
+    "layout": _LAYOUT_FIELDS,
 }
 
 
@@ -93,7 +97,15 @@ class PlotCommand:
     ylabel: str = ""
 
 
-Command = Union[TextCommand, EquationCommand, ImageCommand, PlotCommand]
+@dataclass(frozen=True)
+class LayoutCommand:
+    type: Literal["layout"]
+    id: str
+    direction: LayoutDirection
+    children: tuple[str, ...]
+
+
+Command = Union[TextCommand, EquationCommand, ImageCommand, PlotCommand, LayoutCommand]
 
 
 def parse_command(payload: str | bytes | dict[str, Any]) -> Command:
@@ -189,6 +201,8 @@ def _parse_command_object(obj: Any) -> Command:
         return _parse_equation(obj, ident)
     if type_value == "image":
         return _parse_image(obj, ident)
+    if type_value == "layout":
+        return _parse_layout(obj, ident)
     return _parse_plot(obj, ident)
 
 
@@ -283,6 +297,62 @@ def _parse_image(obj: dict[str, Any], command_id: str) -> ImageCommand:
     source = _required_stripped(obj, "source", max_length=None, command_id=command_id)
     alt = _optional_stripped(obj, "alt", max_length=MAX_ALT_LENGTH, command_id=command_id)
     return ImageCommand(type="image", id=command_id, source=source, alt=alt)
+
+
+def _parse_layout(obj: dict[str, Any], command_id: str) -> LayoutCommand:
+    if "direction" not in obj:
+        raise ProtocolError(
+            "missing_field", "missing field 'direction'", command_id=command_id
+        )
+    direction = obj["direction"]
+    if direction not in ("vertical", "horizontal"):
+        raise ProtocolError(
+            "invalid_field", "invalid field 'direction'", command_id=command_id
+        )
+    if "children" not in obj:
+        raise ProtocolError(
+            "missing_field", "missing field 'children'", command_id=command_id
+        )
+    children_value = obj["children"]
+    if not isinstance(children_value, list):
+        raise ProtocolError(
+            "invalid_field", "invalid field 'children'", command_id=command_id
+        )
+    if not children_value:
+        raise ProtocolError(
+            "empty_field", "empty field 'children'", command_id=command_id
+        )
+    if len(children_value) > MAX_CHILDREN:
+        raise ProtocolError(
+            "limit_exceeded",
+            f"field 'children' exceeds limit of {MAX_CHILDREN}",
+            command_id=command_id,
+        )
+    children: list[str] = []
+    seen: set[str] = set()
+    for item in children_value:
+        if not isinstance(item, str):
+            raise ProtocolError(
+                "invalid_field", "invalid field 'children'", command_id=command_id
+            )
+        if _ID_RE.fullmatch(item) is None:
+            raise ProtocolError(
+                "invalid_id", f"invalid id {item!r}", command_id=command_id
+            )
+        if item in seen:
+            raise ProtocolError(
+                "duplicate_child",
+                f"duplicate child {item!r}",
+                command_id=command_id,
+            )
+        seen.add(item)
+        children.append(item)
+    return LayoutCommand(
+        type="layout",
+        id=command_id,
+        direction=direction,
+        children=tuple(children),
+    )
 
 
 def _parse_plot(obj: dict[str, Any], command_id: str) -> PlotCommand:

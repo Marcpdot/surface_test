@@ -3,6 +3,12 @@
 PROTOCOL_CARD = """\
 You output Surface commands as JSON only. No Qt. No widget instructions.
 
+Reply with one JSON value and nothing else.
+Do not write markdown. Do not wrap the JSON in ``` or ```json fences.
+Do not write any explanation before or after the JSON.
+The first non-whitespace character must be { or [.
+The last non-whitespace character must be } or ].
+
 Allowed types: text, equation, image, plot, layout.
 Emit either a JSON array of command objects, or {"commands": [ ... ]}.
 Unknown fields are rejected. Use only these fields:
@@ -26,4 +32,8 @@ Example:
 
 
 def build_prompt(user_text: str) -> str:
-    return f"{PROTOCOL_CARD.rstrip()}\n\nUser:\n{user_text.strip()}\n"
+    return (
+        f"{PROTOCOL_CARD.rstrip()}\n\n"
+        f"User:\n{user_text.strip()}\n\n"
+        "JSON only. No markdown fences. First character { or [.\n"
+    )

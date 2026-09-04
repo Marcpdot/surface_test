@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 
 from surface.hermes_prompt import build_prompt
 from surface.hermes_transport import HermesTransport
 from surface.protocol import Command, ProtocolError, parse_command_list
+
+_LOG = logging.getLogger("surface.hermes")
+_RAW_PREVIEW = 240
 
 _JSON_FENCE = re.compile(
     r"^```(?:json)?\s*\n(.*)\n```\s*$",
@@ -61,9 +65,22 @@ class HermesBridge:
             raise ProtocolError("empty_field", "empty input")
         raw = transport.complete(build_prompt(stripped))
         unwrapped = unwrap_model_output(raw)
-        if not unwrapped:
-            raise ProtocolError("cannot_translate", "cannot translate Hermes output")
-        return self.from_hermes_output(unwrapped)
+        try:
+            if not unwrapped:
+                raise ProtocolError(
+                    "cannot_translate", "cannot translate Hermes output"
+                )
+            return self.from_hermes_output(unwrapped)
+        except ProtocolError as exc:
+            _LOG.warning("%s: raw Hermes stdout:\n%s", exc.code, raw)
+            if exc.code != "cannot_translate":
+                raise
+            preview = raw.strip()[:_RAW_PREVIEW]
+            raise ProtocolError(
+                "cannot_translate",
+                f"cannot translate Hermes output: {preview}",
+                command_id=exc.command_id,
+            ) from exc
 
     @staticmethod
     def demo_output(*, image_source: str) -> str:

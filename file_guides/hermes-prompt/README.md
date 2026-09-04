@@ -6,7 +6,7 @@ Source: `src/surface/hermes_prompt.py`
 Statisk protocol-kort som forteller Hermes hvilke command-typer og felt som er gyldige.
 
 **Hvordan går data inn og ut?**  
-`build_prompt(user_text)` returnerer kort + `User:` + teksten. Ingen historikk, ingen workspace-dump.
+`build_prompt(user_text)` returnerer kort + `User:` + teksten + en kort JSON-only-påminnelse. Ingen historikk, ingen workspace-dump. Kortet forbyr markdown-fences; første tegn må være `{` eller `[`.
 
 **Hvorfor er den bygget slik?**  
 Prompting er ikke et andre protocol. Validering skjer fortsatt i `protocol.py`.

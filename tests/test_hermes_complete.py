@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
 
 from surface.hermes_bridge import HermesBridge, is_structured_input, unwrap_model_output
+from surface.hermes_prompt import build_prompt
 from surface.hermes_transport import FakeTransport
 from surface.protocol import LayoutCommand, ProtocolError, TextCommand
 
 _EVAL = Path(__file__).resolve().parent / "eval" / "fixtures"
+_OBSERVED_UNCLOSED_FENCE = _EVAL / "06_observed_unclosed_json_fence.txt"
 
 
 def test_is_structured_input() -> None:
@@ -35,7 +38,16 @@ def test_complete_good_json() -> None:
     assert commands == [
         TextCommand(type="text", id="h-1", content="hei", format="markdown")
     ]
-    assert "User:\nforklar" in transport.prompts[0]
+    prompt = transport.prompts[0]
+    assert "User:\nforklar" in prompt
+    assert "JSON only" in prompt
+    assert "No markdown fences" in prompt
+
+
+def test_prompt_requires_bare_json() -> None:
+    prompt = build_prompt("Vis F = ma")
+    assert "Do not wrap the JSON in ``` or ```json fences." in prompt
+    assert prompt.strip().endswith("First character { or [.")
 
 
 def test_complete_fenced_json() -> None:
@@ -106,3 +118,23 @@ def test_eval_invalid_fixture_rejected() -> None:
     raw = (_EVAL / "05_invalid.json").read_text(encoding="utf-8")
     with pytest.raises(ProtocolError):
         HermesBridge().from_hermes_output(raw)
+
+
+def test_observed_unclosed_json_fence_cannot_translate(caplog: pytest.LogCaptureFixture) -> None:
+    """Live Hermes (session 20260904_161029_5e29aa) opened ```json and omitted the closer.
+
+    Unwrap is whole-string fence only; this shape stays cannot_translate. Raw stdout
+    is logged and previewed. No salvage.
+    """
+    raw = _OBSERVED_UNCLOSED_FENCE.read_text(encoding="utf-8")
+    assert raw.startswith("```json\n")
+    assert raw.strip().endswith("}")
+    assert not raw.strip().endswith("```")
+    assert unwrap_model_output(raw).startswith("```")
+    with caplog.at_level(logging.WARNING, logger="surface.hermes"):
+        with pytest.raises(ProtocolError) as exc_info:
+            HermesBridge().complete("ignored", FakeTransport(output=raw))
+    assert exc_info.value.code == "cannot_translate"
+    assert "```json" in exc_info.value.message
+    assert "cannot_translate: raw Hermes stdout:" in caplog.text
+    assert '"intro-1"' in caplog.text

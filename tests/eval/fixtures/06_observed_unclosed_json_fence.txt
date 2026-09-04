@@ -1,0 +1,36 @@
+```json
+{
+  "commands": [
+    {
+      "type": "text",
+      "id": "intro-1",
+      "content": "Newtons andre lov beskriver sammenhengen mellom kraft, masse og akselerasjon:"
+    },
+    {
+      "type": "equation",
+      "id": "eq-1",
+      "latex": "F = m \\cdot a",
+      "display": "block"
+    },
+    {
+      "type": "text",
+      "id": "symbol-f",
+      "content": "**F** — Kraft (force). Måles i newton (N). Er den resulterende kraften som virker på legemet."
+    },
+    {
+      "type": "text",
+      "id": "symbol-m",
+      "content": "**m** — masse (mass). Måles i kilogram (kg). Er et mål på legemets motstand mot akselerasjon (tröghet)."
+    },
+    {
+      "type": "text",
+      "id": "symbol-a",
+      "content": "**a** — akselerasjon (acceleration). Måles i meter per sekund i kvadrat (m/s²). Er endringen i hastighet per tidsenhet."
+    },
+    {
+      "type": "text",
+      "id": "summary-1",
+      "content": "Ligningen sier at kraft er lik masse gange akselerasjon. En kraft på 1 N gir et 1 kg tungt legeme en akselerasjon på 1 m/s²."
+    }
+  ]
+}

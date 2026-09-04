@@ -6,9 +6,16 @@ import logging
 import re
 from collections.abc import Mapping
 
-from surface.hermes_prompt import build_prompt
+from surface.hermes_prompt import STUDY_RESPONSE_PREFIX, build_prompt
 from surface.hermes_transport import HermesTransport
-from surface.protocol import Command, ProtocolError, parse_command_list
+from surface.protocol import (
+    ID_PATTERN,
+    MAX_TEXT_LENGTH,
+    Command,
+    ProtocolError,
+    TextCommand,
+    parse_command_list,
+)
 
 _LOG = logging.getLogger("surface.hermes")
 _RAW_PREVIEW = 240
@@ -66,15 +73,17 @@ class HermesBridge:
         workspace_snapshot: Mapping[str, object] | None = None,
         study_context: Mapping[str, object] | None = None,
     ) -> list[Command]:
-        """Send natural language to Hermes, then parse via from_hermes_output."""
+        """Send natural language to Hermes and translate its bounded response."""
         stripped = text.strip()
         if not stripped:
             raise ProtocolError("empty_field", "empty input")
         raw = transport.complete(
             build_prompt(stripped, workspace_snapshot, study_context)
         )
-        unwrapped = unwrap_model_output(raw)
         try:
+            if study_context is not None:
+                return _parse_study_response(raw, study_context)
+            unwrapped = unwrap_model_output(raw)
             if not unwrapped:
                 raise ProtocolError(
                     "cannot_translate", "cannot translate Hermes output"
@@ -156,3 +165,52 @@ class HermesBridge:
             },
         ]
         return json.dumps(payload)
+
+
+def _parse_study_response(
+    output: str, study_context: Mapping[str, object]
+) -> list[Command]:
+    response_id, max_chars = _study_response_contract(study_context)
+    if not output.startswith(STUDY_RESPONSE_PREFIX):
+        raise ProtocolError(
+            "invalid_study_response",
+            "study response is missing the exact Surface study marker",
+        )
+    content = output[len(STUDY_RESPONSE_PREFIX) :]
+    if not content.strip():
+        raise ProtocolError("invalid_study_response", "study response content is empty")
+    if len(content) > max_chars:
+        raise ProtocolError(
+            "limit_exceeded",
+            f"study response exceeds {max_chars} characters",
+            command_id=response_id,
+        )
+    return [
+        TextCommand(type="text", id=response_id, content=content, format="markdown")
+    ]
+
+
+def _study_response_contract(
+    study_context: Mapping[str, object],
+) -> tuple[str, int]:
+    study = study_context.get("study")
+    response = study.get("response") if isinstance(study, Mapping) else None
+    if not isinstance(response, Mapping) or response.get("type") != "text":
+        raise ProtocolError(
+            "invalid_study_context", "study response contract must require text"
+        )
+    response_id = response.get("id")
+    if not isinstance(response_id, str) or re.fullmatch(ID_PATTERN, response_id) is None:
+        raise ProtocolError(
+            "invalid_study_context", "study response contract has an invalid id"
+        )
+    max_chars = response.get("max_chars", MAX_TEXT_LENGTH)
+    if (
+        isinstance(max_chars, bool)
+        or not isinstance(max_chars, int)
+        or not 0 < max_chars <= MAX_TEXT_LENGTH
+    ):
+        raise ProtocolError(
+            "invalid_study_context", "study response contract has an invalid limit"
+        )
+    return response_id, max_chars

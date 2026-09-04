@@ -330,14 +330,19 @@ def test_fake_hermes_multi_round_study_loop() -> None:
     session = StudySession()
 
     rounds = [
-        ("Gi meg bare et hint", '{"type":"text","id":"hint-1","content":"Start with I=bh^3/12."}'),
+        (
+            "Gi meg bare et hint",
+            "SURFACE_STUDY_RESPONSE\ncontent:\nStart with I=bh^3/12.",
+        ),
         (
             "Jeg fikk 60 MPa. Er det riktig?",
-            '{"type":"text","id":"feedback-1","content":"Yes. Your unit conversion and result are correct."}',
+            "SURFACE_STUDY_RESPONSE\ncontent:\n"
+            "Yes. Your unit conversion and result are correct.",
         ),
         (
             "Vis ett neste steg, men ikke løs resten",
-            '{"type":"text","id":"step-1","content":"Substitute b and h into I=bh^3/12."}',
+            "SURFACE_STUDY_RESPONSE\ncontent:\n"
+            "Substitute b and h into I=bh^3/12.",
         ),
     ]
     for user_text, output in rounds:
@@ -363,7 +368,8 @@ def test_fake_hermes_multi_round_study_loop() -> None:
     solution_commands = bridge.complete(
         solution_text,
         FakeTransport(
-            output='{"type":"text","id":"solution-1","content":"Compute I, use y=h/2, then sigma=My/I=60 MPa."}'
+            output="SURFACE_STUDY_RESPONSE\ncontent:\n"
+            "Compute I, use y=h/2, then sigma=My/I=60 MPa."
         ),
         workspace.snapshot(),
         solution_turn.prompt_context,

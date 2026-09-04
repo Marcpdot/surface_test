@@ -13,6 +13,10 @@ immutable `StudyTurn` eller returnerer `None` for vanlig workspace-input.
 eventuelle deterministiske attempt-/cleanup-commands. `commit` kalles først etter en
 vellykket atomisk workspace-dispatch.
 
+Study-contexten angir også en eksplisitt maksimal responslengde, inkludert
+`solution-1`. Transportgrensen lager en `TextCommand` fra den faste study-markøren,
+mens `finalize` fortsatt er autoriteten som kontrollerer type, id, lengde og stale turn.
+
 **Hvorfor er den bygget slik?**  
 Pedagogisk innhold kommer fra Hermes, mens Surface deterministisk eier intent,
 disclosure-grense, stabile IDs og state-overganger. Dette gjør study-loop testbar uten

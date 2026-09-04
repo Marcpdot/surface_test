@@ -2,6 +2,8 @@
 import json
 from collections.abc import Mapping
 
+STUDY_RESPONSE_PREFIX = "SURFACE_STUDY_RESPONSE\ncontent:\n"
+
 PROTOCOL_CARD = """\
 You output Surface commands as JSON only. No Qt. No widget instructions.
 
@@ -52,26 +54,44 @@ def build_prompt(
 ) -> str:
     snapshot = {"nodes": []} if workspace_snapshot is None else workspace_snapshot
     serialized = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
-    study_section = ""
     if study_context is not None:
-        study = study_context.get("study")
-        mode = study.get("mode") if isinstance(study, Mapping) else None
-        serialized_study = json.dumps(
-            study_context, ensure_ascii=False, separators=(",", ":")
-        )
-        study_section = (
-            "Study turn (Surface-controlled; obey exactly):\n"
-            f"{serialized_study}\n"
-            f"Study policy: {_study_policy(mode)}\n"
-            "Return exactly the one text command described by study.response. "
-            "Do not add, move, remove, or update any other id.\n\n"
+        return _build_study_prompt(
+            user_text,
+            serialized_workspace=serialized,
+            study_context=study_context,
         )
     return (
         f"{PROTOCOL_CARD.rstrip()}\n\n"
         f"Current workspace (Surface semantic state; no Qt):\n{serialized}\n\n"
-        f"{study_section}"
         f"User:\n{user_text.strip()}\n\n"
         "JSON only. No markdown fences. First character { or [.\n"
+    )
+
+
+def _build_study_prompt(
+    user_text: str,
+    *,
+    serialized_workspace: str,
+    study_context: Mapping[str, object],
+) -> str:
+    study = study_context.get("study")
+    mode = study.get("mode") if isinstance(study, Mapping) else None
+    serialized_study = json.dumps(
+        study_context, ensure_ascii=False, separators=(",", ":")
+    )
+    return (
+        "Produce pedagogical text for a Surface-controlled study turn.\n"
+        "Do not output JSON, a command type, an id, or a markdown fence.\n"
+        "Return exactly this fixed envelope, with no text before the marker:\n"
+        f"{STUDY_RESPONSE_PREFIX}<pedagogical content>\n\n"
+        "Everything after the content marker is verbatim response content. Normal "
+        "Unicode, Markdown, literal line breaks, and LaTeX backslashes are allowed.\n\n"
+        f"Current workspace (Surface semantic state; no Qt):\n{serialized_workspace}\n\n"
+        "Study turn (Surface-controlled; obey exactly):\n"
+        f"{serialized_study}\n"
+        f"Study policy: {_study_policy(mode)}\n\n"
+        f"User:\n{user_text.strip()}\n\n"
+        f"{STUDY_RESPONSE_PREFIX}"
     )
 
 

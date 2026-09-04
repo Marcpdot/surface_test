@@ -5,7 +5,13 @@ import re
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from surface.protocol import Command, NodeCommand, RemoveCommand, TextCommand
+from surface.protocol import (
+    MAX_TEXT_LENGTH,
+    Command,
+    NodeCommand,
+    RemoveCommand,
+    TextCommand,
+)
 
 StudyMode = Literal[
     "hint_only",
@@ -23,6 +29,7 @@ _SLOT_LIMITS: dict[str, int] = {
     "attempt-1": MAX_STUDY_ATTEMPT_LENGTH,
     "feedback-1": 1_000,
     "step-1": 1_200,
+    "solution-1": MAX_TEXT_LENGTH,
 }
 _RESPONSE_SLOT: dict[StudyMode, str] = {
     "hint_only": "hint-1",

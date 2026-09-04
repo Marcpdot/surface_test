@@ -9,7 +9,7 @@ import pytest
 from surface.hermes_bridge import HermesBridge, is_structured_input, unwrap_model_output
 from surface.hermes_prompt import build_prompt
 from surface.hermes_transport import FakeTransport
-from surface.protocol import LayoutCommand, ProtocolError, TextCommand
+from surface.protocol import MAX_TEXT_LENGTH, LayoutCommand, ProtocolError, TextCommand
 
 _EVAL = Path(__file__).resolve().parent / "eval" / "fixtures"
 _OBSERVED_UNCLOSED_FENCE = _EVAL / "06_observed_unclosed_json_fence.txt"
@@ -85,7 +85,7 @@ def test_study_context_adds_mode_policy_and_exact_response_contract() -> None:
         }
     }
     transport = FakeTransport(
-        output='{"type":"text","id":"hint-1","content":"Draw a free-body diagram."}'
+        output="SURFACE_STUDY_RESPONSE\ncontent:\nDraw a free-body diagram."
     )
     commands = HermesBridge().complete(
         "bare et hint", transport, {"nodes": []}, context
@@ -103,6 +103,132 @@ def test_study_context_adds_mode_policy_and_exact_response_contract() -> None:
     assert '"mode":"hint_only"' in prompt
     assert '"id":"hint-1"' in prompt
     assert "No derivation and no final answer" in prompt
+    assert "Do not output JSON, a command type, an id" in prompt
+    assert prompt.endswith("SURFACE_STUDY_RESPONSE\ncontent:\n")
+    assert "JSON only. No markdown fences." not in prompt
+
+
+@pytest.mark.parametrize(
+    ("mode", "response_id", "content", "max_chars"),
+    [
+        ("hint_only", "hint-1", "Start with equilibrium.", 600),
+        ("check_attempt", "feedback-1", "Your force balance is correct.", 1_000),
+        ("next_step", "step-1", "Now substitute the known values.", 1_200),
+    ],
+)
+def test_study_envelope_assigns_controlled_response_slots(
+    mode: str, response_id: str, content: str, max_chars: int
+) -> None:
+    context = {
+        "study": {
+            "mode": mode,
+            "response": {
+                "type": "text",
+                "id": response_id,
+                "max_chars": max_chars,
+            },
+        }
+    }
+
+    commands = HermesBridge().complete(
+        "study request",
+        FakeTransport(output=f"SURFACE_STUDY_RESPONSE\ncontent:\n{content}"),
+        {"nodes": []},
+        context,
+    )
+
+    assert commands == [
+        TextCommand(type="text", id=response_id, content=content, format="markdown")
+    ]
+
+
+def test_study_envelope_preserves_long_solution_verbatim() -> None:
+    derivation = "\n".join(
+        f"{number}. Likevekt og geometri gir "
+        + r"\sigma = \frac{My}{I}"
+        + ", med Unicode-kontroll ΣFᵧ = 0 og M ≤ Mₘₐₓ."
+        for number in range(1, 18)
+    )
+    content = (
+        "## Fullstendig løsning\n\n"
+        f"{derivation}"
+        "\n\nJSON-lignende eksempel beholdes også:\n"
+        '{"commands":[{"type":"remove","id":"problem-1"}]}\n\n'
+        "Til slutt er σ = 80 MPa ≤ 100 MPa.\n"
+    )
+    assert len(content) > 1_200
+    context = {
+        "study": {
+            "mode": "show_solution",
+            "response": {
+                "type": "text",
+                "id": "solution-1",
+                "max_chars": MAX_TEXT_LENGTH,
+            },
+        }
+    }
+
+    commands = HermesBridge().complete(
+        "Vis hele løsningen",
+        FakeTransport(output=f"SURFACE_STUDY_RESPONSE\ncontent:\n{content}"),
+        {"nodes": []},
+        context,
+    )
+
+    assert commands == [
+        TextCommand(
+            type="text", id="solution-1", content=content, format="markdown"
+        )
+    ]
+
+
+def test_study_envelope_rejects_oversized_content() -> None:
+    context = {
+        "study": {
+            "mode": "hint_only",
+            "response": {"type": "text", "id": "hint-1", "max_chars": 5},
+        }
+    }
+    with pytest.raises(ProtocolError) as exc_info:
+        HermesBridge().complete(
+            "hint",
+            FakeTransport(output="SURFACE_STUDY_RESPONSE\ncontent:\n123456"),
+            {"nodes": []},
+            context,
+        )
+    assert exc_info.value.code == "limit_exceeded"
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "content:\nmissing marker",
+        "SURFACE_STUDY_RESPONSE\nmissing-content-marker",
+        "SURFACE_STUDY_RESPONSE\ncontent:\n",
+        '{"type":"text","id":"hint-1","content":"old JSON shape"}',
+    ],
+)
+def test_study_envelope_rejects_missing_or_malformed_marker(output: str) -> None:
+    context = {
+        "study": {
+            "mode": "hint_only",
+            "response": {"type": "text", "id": "hint-1", "max_chars": 600},
+        }
+    }
+    with pytest.raises(ProtocolError) as exc_info:
+        HermesBridge().complete(
+            "hint", FakeTransport(output=output), {"nodes": []}, context
+        )
+    assert exc_info.value.code == "invalid_study_response"
+
+
+def test_study_envelope_is_not_accepted_by_ordinary_hermes_path() -> None:
+    with pytest.raises(ProtocolError) as exc_info:
+        HermesBridge().complete(
+            "ordinary request",
+            FakeTransport(output="SURFACE_STUDY_RESPONSE\ncontent:\ntext"),
+        )
+    assert exc_info.value.code == "cannot_translate"
 
 
 def test_ordinary_prompt_has_no_study_policy() -> None:

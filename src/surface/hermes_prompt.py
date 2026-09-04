@@ -1,4 +1,6 @@
 # Qt-free. Static protocol card for Hermes; not a second schema.
+import json
+from collections.abc import Mapping
 
 PROTOCOL_CARD = """\
 You output Surface commands as JSON only. No Qt. No widget instructions.
@@ -9,7 +11,7 @@ Do not write any explanation before or after the JSON.
 The first non-whitespace character must be { or [.
 The last non-whitespace character must be } or ].
 
-Allowed types: text, equation, image, plot, layout.
+Allowed types: text, equation, image, plot, layout, move, remove.
 Emit either a JSON array of command objects, or {"commands": [ ... ]}.
 Unknown fields are rejected. Use only these fields:
 
@@ -18,6 +20,11 @@ equation: type, id, latex, display? (block|inline). latex must not contain $.
 image: type, id, source (local file path), alt?
 plot: type, id, series (list of {x, y, label?, kind?: line|scatter|bar}), title?, xlabel?, ylabel?
 layout: type, id, direction (vertical|horizontal), children (ids of commands in this payload or already on the surface). Create primitives before layout in the same list.
+move: type, id (an existing node), parent (an existing layout id or null for root), index? (zero-based; omitted appends). Moving within the same parent reorders.
+remove: type, id (an existing node). Removing a layout preserves its direct children at root.
+
+For updates, move, and remove, use ids from Current workspace. Do not invent an id for an existing node.
+Primitive upserts update content without changing placement.
 
 ids: [A-Za-z0-9][A-Za-z0-9._-]{0,63}
 
@@ -31,9 +38,15 @@ Example:
 """
 
 
-def build_prompt(user_text: str) -> str:
+def build_prompt(
+    user_text: str,
+    workspace_snapshot: Mapping[str, object] | None = None,
+) -> str:
+    snapshot = {"nodes": []} if workspace_snapshot is None else workspace_snapshot
+    serialized = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     return (
         f"{PROTOCOL_CARD.rstrip()}\n\n"
+        f"Current workspace (Surface semantic state; no Qt):\n{serialized}\n\n"
         f"User:\n{user_text.strip()}\n\n"
         "JSON only. No markdown fences. First character { or [.\n"
     )

@@ -91,15 +91,19 @@ class _HermesThread(QThread):
         bridge: HermesBridge,
         transport: HermesTransport,
         text: str,
+        workspace_snapshot: dict[str, object],
     ) -> None:
         super().__init__()
         self._bridge = bridge
         self._transport = transport
         self._text = text
+        self._workspace_snapshot = workspace_snapshot
 
     def run(self) -> None:
         try:
-            commands = self._bridge.complete(self._text, self._transport)
+            commands = self._bridge.complete(
+                self._text, self._transport, self._workspace_snapshot
+            )
         except Exception as exc:
             self.failed.emit(exc)
             return
@@ -172,7 +176,10 @@ class SurfaceWindow(QWidget):
             return
         self._set_busy(True)
         self._status.setText("waiting…")
-        thread = _HermesThread(self._bridge, self._transport, text.strip())
+        snapshot = self._workspace.snapshot()
+        thread = _HermesThread(
+            self._bridge, self._transport, text.strip(), snapshot
+        )
         thread.succeeded.connect(self._on_hermes_ok)
         thread.failed.connect(self._on_hermes_fail)
         thread.finished.connect(thread.deleteLater)

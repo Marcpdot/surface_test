@@ -11,5 +11,8 @@ Er adapteren mellom rå ekstern tekst/JSON og Surface-protokollen.
 **Hvorfor er den bygget slik?**  
 Ekstern agentintegrasjon isoleres fra resten av Surface, slik at UI og core ikke trenger å vite hvordan Hermes kommuniserer.
 
-**Naturlig videre utvikling**  
+v0.4: `complete` mottar det semantiske workspace-snapshotet og gir det videre til
+promptbyggeren. Parsing og transport er ellers uendret.
+
+**Naturlig videre utvikling**
 Når Hermes kobles på ekte kan transport, prompting og output-normalisering bygges her eller bak denne grensen uten å endre Surface-protokollen.

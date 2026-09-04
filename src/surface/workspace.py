@@ -8,9 +8,8 @@ from PySide6.QtWidgets import QSizePolicy, QVBoxLayout, QWidget
 from surface.blocks import create_block
 from surface.blocks.base import Block
 from surface.blocks.layout import LayoutBlock
-from surface.composition import apply_layout_parents
-from surface.dispatcher import TypeMismatchError
-from surface.protocol import Command, LayoutCommand
+from surface.composition import PlannedAction, WorkspaceState, plan_batch
+from surface.protocol import Command, LayoutCommand, NodeCommand
 
 
 class Workspace(QWidget):
@@ -18,8 +17,7 @@ class Workspace(QWidget):
         super().__init__(parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self._blocks: dict[str, Block] = {}
-        self._commands: dict[str, Command] = {}
-        self._parent_of: dict[str, str | None] = {}
+        self._state = WorkspaceState.empty()
 
         self._layout = QVBoxLayout(self)
         self._layout.setAlignment(Qt.AlignTop)
@@ -27,72 +25,76 @@ class Workspace(QWidget):
         self._layout.setContentsMargins(8, 8, 8, 8)
         self._layout.addStretch()
 
-    def upsert(self, command: Command) -> Literal["created", "updated"]:
-        if isinstance(command, LayoutCommand):
-            return self._upsert_layout(command)
-        existing = self._blocks.get(command.id)
-        if existing is None:
-            block = create_block(command, parent=self)
-            block.render(command)
-            self._layout.insertWidget(self._layout.count() - 1, block)
-            self._blocks[command.id] = block
-            self._commands[command.id] = command
-            self._parent_of[command.id] = None
-            return "created"
-        if existing.command_type() != command.type:
-            raise TypeMismatchError(command.id, existing.command_type(), command.type)
-        existing.render(command)
-        self._commands[command.id] = command
-        return "updated"
+    def apply_many(self, commands: list[Command]) -> list[PlannedAction]:
+        plan = plan_batch(self._state, commands)
+        self._reconcile(plan.state, plan.render_ids, plan.removed_ids)
+        self._state = plan.state
+        return list(plan.actions)
 
-    def _upsert_layout(self, command: LayoutCommand) -> Literal["created", "updated"]:
-        existing = self._blocks.get(command.id)
-        if existing is not None and existing.command_type() != "layout":
-            raise TypeMismatchError(command.id, existing.command_type(), command.type)
-        next_parents = apply_layout_parents(
-            command.id,
-            command.children,
-            known_ids=frozenset(self._commands),
-            parent_of=self._parent_of,
-        )
-        dropped = [
-            child_id
-            for child_id, parent in self._parent_of.items()
-            if parent == command.id and child_id not in command.children
-        ]
-        if existing is None:
-            block = create_block(command, parent=self)
-            block.render(command)
-            self._layout.insertWidget(self._layout.count() - 1, block)
-            self._blocks[command.id] = block
-            self._commands[command.id] = command
-            self._parent_of = next_parents
-            self._parent_of.setdefault(command.id, None)
-            action: Literal["created", "updated"] = "created"
-        else:
-            existing.render(command)
-            self._commands[command.id] = command
-            self._parent_of = next_parents
-            action = "updated"
-
-        layout_block = self._blocks[command.id]
-        assert isinstance(layout_block, LayoutBlock)
-        for child_id in command.children:
-            child = self._blocks[child_id]
-            self._layout.removeWidget(child)
-        layout_block.set_children([self._blocks[child_id] for child_id in command.children])
-        for child_id in dropped:
-            self._place_on_root(self._blocks[child_id])
+    def upsert(self, command: NodeCommand) -> Literal["created", "updated"]:
+        """Compatibility one-node API; dispatcher uses atomic ``apply_many``."""
+        action = self.apply_many([command])[0].action
+        assert action in ("created", "updated")
         return action
 
-    def _place_on_root(self, block: Block) -> None:
-        self._layout.insertWidget(self._layout.count() - 1, block)
+    def _reconcile(
+        self,
+        next_state: WorkspaceState,
+        render_ids: frozenset[str],
+        removed_ids: frozenset[str],
+    ) -> None:
+        next_blocks = dict(self._blocks)
+        prepared: dict[str, Block] = {}
 
-    def get(self, command_id: str) -> Command | None:
-        return self._commands.get(command_id)
+        for node_id in next_state.commands:
+            if node_id not in next_blocks or node_id in removed_ids:
+                command = next_state.commands[node_id]
+                block = create_block(command, parent=self)
+                block.render(command)
+                prepared[node_id] = block
+
+        for node_id in render_ids:
+            if (
+                node_id in self._blocks
+                and node_id not in removed_ids
+                and node_id in next_state.commands
+            ):
+                next_blocks[node_id].render(next_state.commands[node_id])
+
+        for block in self._blocks.values():
+            if isinstance(block, LayoutBlock):
+                block.set_children([])
+
+        for block in next_blocks.values():
+            self._layout.removeWidget(block)
+
+        for node_id in removed_ids:
+            block = next_blocks.pop(node_id)
+            block.setParent(None)
+            block.deleteLater()
+
+        next_blocks.update(prepared)
+
+        for node_id, command in next_state.commands.items():
+            if not isinstance(command, LayoutCommand):
+                continue
+            layout_block = next_blocks[node_id]
+            assert isinstance(layout_block, LayoutBlock)
+            layout_block.set_children([next_blocks[child] for child in command.children])
+
+        for node_id in next_state.root_children:
+            self._layout.insertWidget(self._layout.count() - 1, next_blocks[node_id])
+
+        self._blocks = next_blocks
+
+    def get(self, command_id: str) -> NodeCommand | None:
+        return self._state.commands.get(command_id)
 
     def list_ids(self) -> list[str]:
-        return list(self._commands)
+        return list(self._state.commands)
+
+    def snapshot(self) -> dict[str, object]:
+        return self._state.snapshot()
 
     def sizeHint(self) -> QSize:
         return self._layout.sizeHint()

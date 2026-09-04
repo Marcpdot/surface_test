@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal, Union
 
-CommandType = Literal["text", "equation", "image", "plot", "layout"]
+CommandType = Literal["text", "equation", "image", "plot", "layout", "move", "remove"]
 TextFormat = Literal["markdown", "plain"]
 EquationDisplay = Literal["block", "inline"]
 SeriesKind = Literal["line", "scatter", "bar"]
@@ -31,6 +31,8 @@ _EQUATION_FIELDS = frozenset({"type", "id", "latex", "display"})
 _IMAGE_FIELDS = frozenset({"type", "id", "source", "alt"})
 _PLOT_FIELDS = frozenset({"type", "id", "series", "title", "xlabel", "ylabel"})
 _LAYOUT_FIELDS = frozenset({"type", "id", "direction", "children"})
+_MOVE_FIELDS = frozenset({"type", "id", "parent", "index"})
+_REMOVE_FIELDS = frozenset({"type", "id"})
 _SERIES_FIELDS = frozenset({"x", "y", "label", "kind"})
 _ALLOWED_FIELDS = {
     "text": _TEXT_FIELDS,
@@ -38,6 +40,8 @@ _ALLOWED_FIELDS = {
     "image": _IMAGE_FIELDS,
     "plot": _PLOT_FIELDS,
     "layout": _LAYOUT_FIELDS,
+    "move": _MOVE_FIELDS,
+    "remove": _REMOVE_FIELDS,
 }
 
 
@@ -105,7 +109,22 @@ class LayoutCommand:
     children: tuple[str, ...]
 
 
-Command = Union[TextCommand, EquationCommand, ImageCommand, PlotCommand, LayoutCommand]
+@dataclass(frozen=True)
+class MoveCommand:
+    type: Literal["move"]
+    id: str
+    parent: str | None
+    index: int | None = None
+
+
+@dataclass(frozen=True)
+class RemoveCommand:
+    type: Literal["remove"]
+    id: str
+
+
+NodeCommand = Union[TextCommand, EquationCommand, ImageCommand, PlotCommand, LayoutCommand]
+Command = Union[NodeCommand, MoveCommand, RemoveCommand]
 
 
 def parse_command(payload: str | bytes | dict[str, Any]) -> Command:
@@ -203,6 +222,10 @@ def _parse_command_object(obj: Any) -> Command:
         return _parse_image(obj, ident)
     if type_value == "layout":
         return _parse_layout(obj, ident)
+    if type_value == "move":
+        return _parse_move(obj, ident)
+    if type_value == "remove":
+        return RemoveCommand(type="remove", id=ident)
     return _parse_plot(obj, ident)
 
 
@@ -353,6 +376,33 @@ def _parse_layout(obj: dict[str, Any], command_id: str) -> LayoutCommand:
         direction=direction,
         children=tuple(children),
     )
+
+
+def _parse_move(obj: dict[str, Any], command_id: str) -> MoveCommand:
+    if "parent" not in obj:
+        raise ProtocolError(
+            "missing_field", "missing field 'parent'", command_id=command_id
+        )
+    parent = obj["parent"]
+    if parent is not None:
+        if not isinstance(parent, str):
+            raise ProtocolError(
+                "invalid_field", "invalid field 'parent'", command_id=command_id
+            )
+        if _ID_RE.fullmatch(parent) is None:
+            raise ProtocolError(
+                "invalid_id", f"invalid id {parent!r}", command_id=command_id
+            )
+
+    index: int | None = None
+    if "index" in obj:
+        value = obj["index"]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ProtocolError(
+                "invalid_field", "invalid field 'index'", command_id=command_id
+            )
+        index = value
+    return MoveCommand(type="move", id=command_id, parent=parent, index=index)
 
 
 def _parse_plot(obj: dict[str, Any], command_id: str) -> PlotCommand:

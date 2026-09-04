@@ -10,8 +10,10 @@ from surface.protocol import (
     EquationCommand,
     ImageCommand,
     LayoutCommand,
+    MoveCommand,
     PlotCommand,
     ProtocolError,
+    RemoveCommand,
     Series,
     TextCommand,
     parse_command,
@@ -668,3 +670,42 @@ def test_from_user_input_json_ignores_text_id() -> None:
         TextCommand(type="text", id="h-1", content="hei", format="markdown")
     ]
     assert all(command.id != "user-ignored" for command in commands)
+
+
+def test_move_command_defaults_to_append() -> None:
+    assert parse_command({"type": "move", "id": "eq-1", "parent": "row-1"}) == MoveCommand(
+        type="move", id="eq-1", parent="row-1", index=None
+    )
+
+
+def test_move_command_to_root_with_index() -> None:
+    assert parse_command(
+        {"type": "move", "id": "eq-1", "parent": None, "index": 0}
+    ) == MoveCommand(type="move", id="eq-1", parent=None, index=0)
+
+
+def test_remove_command() -> None:
+    assert parse_command({"type": "remove", "id": "hint-1"}) == RemoveCommand(
+        type="remove", id="hint-1"
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"type": "move", "id": "a"},
+        {"type": "move", "id": "a", "parent": 1},
+        {"type": "move", "id": "a", "parent": "bad id"},
+        {"type": "move", "id": "a", "parent": None, "index": -1},
+        {"type": "move", "id": "a", "parent": None, "index": True},
+        {"type": "move", "id": "a", "parent": None, "index": 1.5},
+    ],
+)
+def test_invalid_move_fields(payload: dict[str, object]) -> None:
+    with pytest.raises(ProtocolError):
+        parse_command(payload)
+
+
+def test_workspace_operations_reject_unknown_fields() -> None:
+    assert _error({"type": "move", "id": "a", "parent": None, "x": 1}).code == "unknown_field"
+    assert _error({"type": "remove", "id": "a", "recursive": True}).code == "unknown_field"

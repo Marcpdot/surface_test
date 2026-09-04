@@ -2,7 +2,7 @@ from typing import Literal
 
 import pytest
 
-from surface.composition import apply_layout_parents
+from surface.composition import PlannedAction, WorkspaceState, plan_batch
 from surface.dispatcher import (
     Dispatcher,
     DispatchResult,
@@ -15,37 +15,30 @@ from surface.protocol import (
     EquationCommand,
     ImageCommand,
     LayoutCommand,
+    MoveCommand,
     PlotCommand,
     Series,
     TextCommand,
+    RemoveCommand,
 )
 
 
 class FakeWorkspace:
     def __init__(self) -> None:
-        self.commands: dict[str, Command] = {}
-        self.parent_of: dict[str, str | None] = {}
+        self.state = WorkspaceState.empty()
 
-    def upsert(self, command: Command) -> Literal["created", "updated"]:
-        existing = self.commands.get(command.id)
-        if existing is not None and existing.type != command.type:
-            raise TypeMismatchError(command.id, existing.type, command.type)
-        if isinstance(command, LayoutCommand):
-            next_parents = apply_layout_parents(
-                command.id,
-                command.children,
-                known_ids=frozenset(self.commands),
-                parent_of=self.parent_of,
-            )
-            self.parent_of = next_parents
-            self.parent_of.setdefault(command.id, None)
-        if existing is None:
-            self.commands[command.id] = command
-            if command.id not in self.parent_of:
-                self.parent_of[command.id] = None
-            return "created"
-        self.commands[command.id] = command
-        return "updated"
+    @property
+    def commands(self):
+        return self.state.commands
+
+    @property
+    def parent_of(self):
+        return self.state.parent_of
+
+    def apply_many(self, commands: list[Command]) -> list[PlannedAction]:
+        plan = plan_batch(self.state, commands)
+        self.state = plan.state
+        return list(plan.actions)
 
     def get(self, command_id: str) -> Command | None:
         return self.commands.get(command_id)
@@ -55,7 +48,8 @@ class FakeWorkspace:
 
 
 class _UnknownBlockWorkspace(FakeWorkspace):
-    def upsert(self, command: Command) -> Literal["created", "updated"]:
+    def apply_many(self, commands: list[Command]) -> list[PlannedAction]:
+        command = commands[0]
         raise UnknownBlockError(command.id, command.type)
 
 
@@ -291,32 +285,30 @@ def test_unknown_block() -> None:
     assert workspace.list_ids() == []
 
 
-def test_dispatch_many_mismatch_leaves_prior_command() -> None:
+def test_dispatch_many_mismatch_is_atomic() -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)
     valid = TextCommand(type="text", id="a", content="one")
     mismatch = EquationCommand(type="equation", id="a", latex="x")
     results = dispatcher.dispatch_many([valid, mismatch])
-    assert results[0].ok is True
-    assert results[0].action == "created"
-    assert results[1].ok is False
-    assert results[1].error_code == "type_mismatch"
-    assert results[1].command_type == "equation"
-    assert workspace.list_ids() == ["a"]
-    assert workspace.get("a") == valid
+    assert len(results) == 1
+    assert results[0].ok is False
+    assert results[0].error_code == "type_mismatch"
+    assert results[0].command_type == "equation"
+    assert workspace.list_ids() == []
 
 
-def test_dispatch_many_continues_after_mismatch() -> None:
+def test_dispatch_many_does_not_run_after_mismatch() -> None:
     workspace = FakeWorkspace()
     dispatcher = Dispatcher(workspace)
     first = TextCommand(type="text", id="a", content="one")
     mismatch = EquationCommand(type="equation", id="a", latex="x")
     third = TextCommand(type="text", id="b", content="two")
     results = dispatcher.dispatch_many([first, mismatch, third])
-    assert [result.ok for result in results] == [True, False, True]
-    assert results[2].action == "created"
-    assert workspace.get("a") == first
-    assert workspace.get("b") == third
+    assert len(results) == 1
+    assert results[0].error_code == "type_mismatch"
+    assert workspace.get("a") is None
+    assert workspace.get("b") is None
 
 
 def test_hermes_bridge_dispatch_many_chain() -> None:
@@ -522,3 +514,41 @@ def test_layout_unknown_child_does_not_mutate() -> None:
     assert result.ok is False
     assert workspace.parent_of.get("a") is None
     assert "row-1" not in workspace.commands
+
+
+def test_dispatch_move_remove_actions() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    assert all(
+        result.ok
+        for result in dispatcher.dispatch_many(
+            [
+                TextCommand(type="text", id="a", content="a"),
+                LayoutCommand(
+                    type="layout", id="row", direction="vertical", children=("a",)
+                ),
+            ]
+        )
+    )
+    moved = dispatcher.dispatch(MoveCommand(type="move", id="a", parent=None))
+    assert moved.ok is True
+    assert moved.action == "moved"
+    removed = dispatcher.dispatch(RemoveCommand(type="remove", id="a"))
+    assert removed.ok is True
+    assert removed.action == "removed"
+    assert workspace.get("a") is None
+
+
+def test_dispatch_invalid_manipulation_is_atomic() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    dispatcher.dispatch(TextCommand(type="text", id="a", content="old"))
+    results = dispatcher.dispatch_many(
+        [
+            TextCommand(type="text", id="a", content="new"),
+            MoveCommand(type="move", id="missing", parent=None),
+        ]
+    )
+    assert len(results) == 1
+    assert results[0].error_code == "unknown_id"
+    assert workspace.get("a").content == "old"  # type: ignore[union-attr]

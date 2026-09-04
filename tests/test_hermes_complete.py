@@ -44,6 +44,36 @@ def test_complete_good_json() -> None:
     assert "No markdown fences" in prompt
 
 
+def test_complete_includes_semantic_workspace_snapshot() -> None:
+    transport = FakeTransport(
+        output='{"type":"move","id":"eq-1","parent":"row-1","index":0}'
+    )
+    snapshot = {
+        "nodes": [
+            {"id": "eq-1", "type": "equation", "parent": None, "index": 0},
+            {
+                "id": "row-1",
+                "type": "layout",
+                "parent": None,
+                "index": 1,
+                "direction": "horizontal",
+            },
+        ]
+    }
+    commands = HermesBridge().complete("flytt ligningen", transport, snapshot)
+    assert commands[0].type == "move"
+    prompt = transport.prompts[0]
+    assert '"id":"eq-1"' in prompt
+    assert '"direction":"horizontal"' in prompt
+    assert "move: type, id" in prompt
+    assert "No Qt" in prompt
+
+
+def test_prompt_defaults_to_empty_workspace() -> None:
+    prompt = build_prompt("Vis F = ma")
+    assert 'Current workspace (Surface semantic state; no Qt):\n{"nodes":[]}' in prompt
+
+
 def test_prompt_requires_bare_json() -> None:
     prompt = build_prompt("Vis F = ma")
     assert "Do not wrap the JSON in ``` or ```json fences." in prompt

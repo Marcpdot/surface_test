@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Mapping
 
 from surface.hermes_prompt import build_prompt
 from surface.hermes_transport import HermesTransport
@@ -58,12 +59,17 @@ class HermesBridge:
             raise ProtocolError("cannot_translate", "cannot translate Hermes output")
         return self.from_hermes_output(stripped)
 
-    def complete(self, text: str, transport: HermesTransport) -> list[Command]:
+    def complete(
+        self,
+        text: str,
+        transport: HermesTransport,
+        workspace_snapshot: Mapping[str, object] | None = None,
+    ) -> list[Command]:
         """Send natural language to Hermes, then parse via from_hermes_output."""
         stripped = text.strip()
         if not stripped:
             raise ProtocolError("empty_field", "empty input")
-        raw = transport.complete(build_prompt(stripped))
+        raw = transport.complete(build_prompt(stripped, workspace_snapshot))
         unwrapped = unwrap_model_output(raw)
         try:
             if not unwrapped:

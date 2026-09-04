@@ -7,7 +7,6 @@ from surface.hermes_bridge import HermesBridge
 from surface.image_source import interpret_image_source, resolve_image_file
 from surface.protocol import (
     MAX_CHILDREN,
-    MAX_TEXT_LENGTH,
     EquationCommand,
     ImageCommand,
     LayoutCommand,
@@ -551,20 +550,13 @@ def test_from_hermes_output_cannot_translate_prose() -> None:
     assert exc_info.value.code == "cannot_translate"
 
 
-def test_from_user_input_wraps_prose_as_text_command() -> None:
-    commands = HermesBridge().from_user_input("  notat  ", text_id="user-1")
-    assert commands == [
-        TextCommand(type="text", id="user-1", content="notat", format="markdown")
-    ]
-
-
-def test_from_user_input_prose_uses_protocol_limits() -> None:
+def test_from_user_input_prose_is_not_a_text_command() -> None:
     with pytest.raises(ProtocolError) as exc_info:
-        HermesBridge().from_user_input("x" * (MAX_TEXT_LENGTH + 1), text_id="user-1")
-    assert exc_info.value.code == "limit_exceeded"
+        HermesBridge().from_user_input("  notat  ", text_id="user-1")
+    assert exc_info.value.code == "cannot_translate"
 
 
-def test_from_user_input_empty_prose_rejected() -> None:
+def test_from_user_input_empty_rejected() -> None:
     with pytest.raises(ProtocolError) as exc_info:
         HermesBridge().from_user_input("   ", text_id="user-1")
     assert exc_info.value.code == "empty_field"

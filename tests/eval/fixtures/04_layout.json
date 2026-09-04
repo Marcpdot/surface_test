@@ -1,0 +1,31 @@
+{
+  "commands": [
+    {
+      "type": "text",
+      "id": "explanation-1",
+      "content": "Bøyspenning beskrives med formelen under. Diagrammet viser moment langs bjelken.",
+      "format": "markdown"
+    },
+    {
+      "type": "equation",
+      "id": "eq-1",
+      "latex": "\\sigma = \\frac{My}{I}"
+    },
+    {
+      "type": "plot",
+      "id": "plot-1",
+      "title": "Moment along beam",
+      "xlabel": "x",
+      "ylabel": "M",
+      "series": [
+        {"x": [0, 1, 2], "y": [0, 1, 0], "kind": "line", "label": "M"}
+      ]
+    },
+    {
+      "type": "layout",
+      "id": "study-1",
+      "direction": "horizontal",
+      "children": ["explanation-1", "plot-1"]
+    }
+  ]
+}

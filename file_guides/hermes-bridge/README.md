@@ -6,7 +6,7 @@ Source: `src/surface/hermes_bridge.py`
 Er adapteren mellom rå ekstern tekst/JSON og Surface-protokollen.
 
 **Hvordan går data inn og ut?**  
-Rå streng fra bruker eller fremtidig Hermes-output går inn; en liste med validerte `Command`-objekter kommer ut.
+`from_hermes_output` / `from_user_input` tar kun strukturert JSON (`{`/`[`). Naturlig språk går via `complete(text, transport)` → prompt + transport + valgfri ```json-fence → `from_hermes_output`. Prose blir ikke lenger en lokal `TextCommand`.
 
 **Hvorfor er den bygget slik?**  
 Ekstern agentintegrasjon isoleres fra resten av Surface, slik at UI og core ikke trenger å vite hvordan Hermes kommuniserer.

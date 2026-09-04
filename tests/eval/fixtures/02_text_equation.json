@@ -1,0 +1,15 @@
+{
+  "commands": [
+    {
+      "type": "text",
+      "id": "explanation-1",
+      "content": "Bøyspenning $\\sigma$ avhenger av moment $M$, avstand $y$ og andre moment $I$.",
+      "format": "markdown"
+    },
+    {
+      "type": "equation",
+      "id": "eq-1",
+      "latex": "\\sigma = \\frac{My}{I}"
+    }
+  ]
+}

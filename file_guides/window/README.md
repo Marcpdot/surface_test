@@ -6,7 +6,7 @@ Source: `src/surface/window.py`
 Eier hovedvinduet, brukerinput, statusvisning og koblingen mellom bridge, dispatcher og workspace.
 
 **Hvordan går data inn og ut?**  
-Brukerinput eller injisert output kommer inn; commands parses/dispatces og resultatet vises i workspace og statuslinjen.
+JSON og `--inject`/`--demo` parses synkront. Naturlig språk kjører `HermesBridge.complete` på en `QThread` (subprocess aldri på GUI-tråden). Status `waiting…` mens kallet pågår; `ProtocolError` vises på statuslinjen.
 
 **Hvorfor er den bygget slik?**  
 Den fungerer som Qt-grensen der UI-events møter den Qt-frie kjernen.

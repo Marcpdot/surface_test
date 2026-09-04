@@ -1,0 +1,20 @@
+{
+  "commands": [
+    {
+      "type": "text",
+      "id": "moment-note",
+      "content": "Trekantformet momentdiagram for en enkel last.",
+      "format": "markdown"
+    },
+    {
+      "type": "plot",
+      "id": "plot-1",
+      "title": "Moment",
+      "xlabel": "x",
+      "ylabel": "M",
+      "series": [
+        {"x": [0, 1, 2], "y": [0, 1, 0], "kind": "line", "label": "M"}
+      ]
+    }
+  ]
+}

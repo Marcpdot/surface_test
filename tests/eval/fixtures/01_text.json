@@ -1,0 +1,10 @@
+{
+  "commands": [
+    {
+      "type": "text",
+      "id": "gradient-1",
+      "content": "Gradienten peker i retning av brattest stigning og har størrelse lik den retningsderiverte der.",
+      "format": "markdown"
+    }
+  ]
+}

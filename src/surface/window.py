@@ -2,7 +2,7 @@ import logging
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QImage, QKeyEvent, QMouseEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from surface.dispatcher import Dispatcher, DispatchResult
-from surface.hermes_bridge import HermesBridge
+from surface.hermes_bridge import HermesBridge, is_structured_input
+from surface.hermes_transport import HermesTransport, transport_from_env
 from surface.protocol import Command, ProtocolError
 from surface.workspace import Workspace
 
@@ -68,7 +69,9 @@ class _InputEdit(QPlainTextEdit):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedHeight(_INPUT_HEIGHT)
-        self.setPlaceholderText("Notat eller JSON-kommando. Ctrl+Enter sender.")
+        self.setPlaceholderText(
+            "Natural language goes to Hermes. JSON still works. Ctrl+Enter sends."
+        )
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() in (Qt.Key_Return, Qt.Key_Enter) and (
@@ -77,6 +80,30 @@ class _InputEdit(QPlainTextEdit):
             self.submitted.emit()
             return
         super().keyPressEvent(event)
+
+
+class _HermesThread(QThread):
+    succeeded = Signal(object)
+    failed = Signal(object)
+
+    def __init__(
+        self,
+        bridge: HermesBridge,
+        transport: HermesTransport,
+        text: str,
+    ) -> None:
+        super().__init__()
+        self._bridge = bridge
+        self._transport = transport
+        self._text = text
+
+    def run(self) -> None:
+        try:
+            commands = self._bridge.complete(self._text, self._transport)
+        except Exception as exc:
+            self.failed.emit(exc)
+            return
+        self.succeeded.emit(commands)
 
 
 class SurfaceWindow(QWidget):
@@ -92,6 +119,9 @@ class SurfaceWindow(QWidget):
         self._workspace = Workspace(self)
         self._dispatcher = Dispatcher(self._workspace)
         self._bridge = HermesBridge()
+        self._transport = transport_from_env()
+        self._busy = False
+        self._hermes_thread: _HermesThread | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -116,35 +146,65 @@ class SurfaceWindow(QWidget):
         self._input = _InputEdit(self)
         self._input.submitted.connect(self._submit_from_input)
         input_row.addWidget(self._input, 1)
-        send = QPushButton("Send", self)
-        send.clicked.connect(self._submit_from_input)
-        input_row.addWidget(send)
+        self._send = QPushButton("Send", self)
+        self._send.clicked.connect(self._submit_from_input)
+        input_row.addWidget(self._send)
         root.addLayout(input_row)
 
         self._size_grip = QSizeGrip(self)
 
     def submit_text(self, text: str) -> None:
-        if not text.strip():
+        if not text.strip() or self._busy:
             return
-        try:
-            commands = self._bridge.from_user_input(
-                text, text_id=self._allocate_user_id()
+        if is_structured_input(text):
+            try:
+                commands = self._bridge.from_user_input(text)
+                self.apply_commands(commands)
+            except ProtocolError as exc:
+                self._set_status_error(exc)
+            except Exception as exc:
+                self._set_internal_error(exc)
+            return
+        if self._transport is None:
+            self._set_status_error(
+                ProtocolError("hermes_unavailable", "Hermes is not configured")
             )
-            self.apply_commands(commands)
-        except ProtocolError as exc:
-            self._set_status_error(exc)
-        except Exception as exc:
-            self._set_internal_error(exc)
+            return
+        self._set_busy(True)
+        self._status.setText("waiting…")
+        thread = _HermesThread(self._bridge, self._transport, text.strip())
+        thread.succeeded.connect(self._on_hermes_ok)
+        thread.failed.connect(self._on_hermes_fail)
+        thread.finished.connect(thread.deleteLater)
+        self._hermes_thread = thread
+        thread.start()
 
     def _submit_from_input(self) -> None:
         self.submit_text(self._input.toPlainText())
 
-    def _allocate_user_id(self) -> str:
-        existing = set(self._workspace.list_ids())
-        n = 1
-        while f"user-{n}" in existing:
-            n += 1
-        return f"user-{n}"
+    def _set_busy(self, busy: bool) -> None:
+        self._busy = busy
+        self._input.setEnabled(not busy)
+        self._send.setEnabled(not busy)
+
+    def _on_hermes_ok(self, commands: object) -> None:
+        self._set_busy(False)
+        self._hermes_thread = None
+        if not isinstance(commands, list):
+            self._set_internal_error(TypeError("Hermes result is not a command list"))
+            return
+        self._input.clear()
+        self.apply_commands(commands)
+
+    def _on_hermes_fail(self, exc: object) -> None:
+        self._set_busy(False)
+        self._hermes_thread = None
+        if isinstance(exc, ProtocolError):
+            self._set_status_error(exc)
+        elif isinstance(exc, BaseException):
+            self._set_internal_error(exc)
+        else:
+            self._set_internal_error(RuntimeError(str(exc)))
 
     def run_demo(self) -> None:
         try:

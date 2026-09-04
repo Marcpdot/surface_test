@@ -2,8 +2,29 @@
 from __future__ import annotations
 
 import json
+import re
 
-from surface.protocol import Command, ProtocolError, parse_command, parse_command_list
+from surface.hermes_prompt import build_prompt
+from surface.hermes_transport import HermesTransport
+from surface.protocol import Command, ProtocolError, parse_command_list
+
+_JSON_FENCE = re.compile(
+    r"^```(?:json)?\s*\n(.*)\n```\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def is_structured_input(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith("{") or stripped.startswith("[")
+
+
+def unwrap_model_output(raw: str) -> str:
+    stripped = raw.strip()
+    match = _JSON_FENCE.fullmatch(stripped)
+    if match is not None:
+        return match.group(1).strip()
+    return stripped
 
 
 class HermesBridge:
@@ -19,32 +40,34 @@ class HermesBridge:
             raise ProtocolError("cannot_translate", "cannot translate Hermes output")
         return parse_command_list(stripped)
 
-    def from_user_input(self, text: str, *, text_id: str) -> list[Command]:
-        """User input bar.
+    def from_user_input(self, text: str, *, text_id: str = "") -> list[Command]:
+        """Local/debug structured input only. ``text_id`` is ignored.
 
-        Stripped text starting with '{' or '[' → from_hermes_output
-        (text_id is ignored; commands carry their own ids).
-        Otherwise → parse_command as a text command (same limits as protocol).
+        Stripped text starting with '{' or '[' → from_hermes_output.
+        Otherwise → ProtocolError(cannot_translate). Empty → empty_field.
+        Natural language belongs to complete().
         """
         stripped = text.strip()
-        if stripped.startswith("{") or stripped.startswith("["):
-            return self.from_hermes_output(stripped)
-        return [
-            parse_command(
-                {
-                    "type": "text",
-                    "id": text_id,
-                    "content": stripped,
-                    "format": "markdown",
-                }
-            )
-        ]
+        if not stripped:
+            raise ProtocolError("empty_field", "empty input")
+        if not is_structured_input(stripped):
+            raise ProtocolError("cannot_translate", "cannot translate Hermes output")
+        return self.from_hermes_output(stripped)
+
+    def complete(self, text: str, transport: HermesTransport) -> list[Command]:
+        """Send natural language to Hermes, then parse via from_hermes_output."""
+        stripped = text.strip()
+        if not stripped:
+            raise ProtocolError("empty_field", "empty input")
+        raw = transport.complete(build_prompt(stripped))
+        unwrapped = unwrap_model_output(raw)
+        if not unwrapped:
+            raise ProtocolError("cannot_translate", "cannot translate Hermes output")
+        return self.from_hermes_output(unwrapped)
 
     @staticmethod
     def demo_output(*, image_source: str) -> str:
-        """json.dumps of [text, equation, image, plot]. image_source is an
-        already existing file path; json.dumps escapes backslash on Windows.
-        """
+        """json.dumps of primitives plus study layouts."""
         payload = [
             {
                 "type": "text",

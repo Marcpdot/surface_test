@@ -17,7 +17,15 @@ def run(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
-    parser = argparse.ArgumentParser(prog="surface", exit_on_error=False)
+    parser = argparse.ArgumentParser(
+        prog="surface",
+        exit_on_error=False,
+        epilog=(
+            "Natural language uses Hermes: set SURFACE_HERMES_CMD "
+            "(argv, stdin=prompt, stdout=JSON). Optional SURFACE_HERMES_TIMEOUT_S "
+            "(default 60). JSON paste, --inject, and --demo do not call Hermes."
+        ),
+    )
     exclusive = parser.add_mutually_exclusive_group()
     exclusive.add_argument("--demo", action="store_true")
     exclusive.add_argument("--inject", metavar="PATH")

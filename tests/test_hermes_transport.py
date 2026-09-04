@@ -8,6 +8,7 @@ import pytest
 from surface.hermes_transport import (
     CommandTransport,
     FakeTransport,
+    _oneshot_argv,
     transport_from_env,
 )
 from surface.protocol import ProtocolError
@@ -34,10 +35,34 @@ def test_transport_from_env_missing() -> None:
     assert transport_from_env({"SURFACE_HERMES_CMD": "  "}) is None
 
 
+def test_oneshot_argv_inserts_z_for_bare_hermes() -> None:
+    assert _oneshot_argv(["hermes"], "hello") == ["hermes", "-z", "hello"]
+    assert _oneshot_argv(["hermes", "-z"], "hello") == ["hermes", "-z", "hello"]
+    assert _oneshot_argv(["hermes", "--oneshot"], "hello") == [
+        "hermes",
+        "--oneshot",
+        "hello",
+    ]
+
+
 def test_command_transport_stub_ok() -> None:
     transport = CommandTransport([sys.executable, _STUB], timeout_s=10)
     out = transport.complete("prompt")
     assert '"stub-1"' in out
+
+
+def test_command_transport_passes_prompt_as_argument() -> None:
+    transport = CommandTransport(
+        [sys.executable, _STUB, "--echo-prompt"], timeout_s=10
+    )
+    out = transport.complete("σ-prompt")
+    assert "σ-prompt" in out
+
+
+def test_command_transport_utf8_output() -> None:
+    transport = CommandTransport([sys.executable, _STUB, "--utf8"], timeout_s=10)
+    out = transport.complete("prompt")
+    assert "σ bøye 日本語" in out
 
 
 def test_command_transport_stub_fail() -> None:

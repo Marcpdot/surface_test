@@ -21,9 +21,10 @@ def run(argv: list[str] | None = None) -> int:
         prog="surface",
         exit_on_error=False,
         epilog=(
-            "Natural language uses Hermes: set SURFACE_HERMES_CMD "
-            "(argv, stdin=prompt, stdout=JSON). Optional SURFACE_HERMES_TIMEOUT_S "
-            "(default 60). JSON paste, --inject, and --demo do not call Hermes."
+            "Natural language uses Hermes one-shot: set SURFACE_HERMES_CMD "
+            "to 'hermes -z' (prompt is passed as -z's argument; not interactive "
+            "hermes). Optional SURFACE_HERMES_TIMEOUT_S (default 60). JSON paste, "
+            "--inject, and --demo do not call Hermes."
         ),
     )
     exclusive = parser.add_mutually_exclusive_group()

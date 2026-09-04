@@ -50,9 +50,6 @@ class FakeWorkspace:
     def get(self, command_id: str) -> Command | None:
         return self.commands.get(command_id)
 
-    def remove(self, command_id: str) -> bool:
-        return self.commands.pop(command_id, None) is not None
-
     def list_ids(self) -> list[str]:
         return list(self.commands)
 
@@ -437,6 +434,77 @@ def test_demo_output_dispatches_study_layout() -> None:
     ]
     assert workspace.parent_of["problem-1"] == "row-problem"
     assert workspace.parent_of["row-problem"] == "study-1"
+
+
+def test_layout_cycle() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    dispatcher.dispatch(TextCommand(type="text", id="a", content="a"))
+    dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-1",
+            direction="horizontal",
+            children=("a",),
+        )
+    )
+    dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="study-1",
+            direction="vertical",
+            children=("row-1",),
+        )
+    )
+    result = dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row-1",
+            direction="horizontal",
+            children=("study-1",),
+        )
+    )
+    assert result.ok is False
+    assert result.error_code == "cycle"
+    assert workspace.parent_of["row-1"] == "study-1"
+    assert workspace.parent_of["a"] == "row-1"
+
+
+def test_layout_upsert_does_not_lose_or_duplicate_blocks() -> None:
+    workspace = FakeWorkspace()
+    dispatcher = Dispatcher(workspace)
+    dispatcher.dispatch(TextCommand(type="text", id="a", content="a"))
+    dispatcher.dispatch(TextCommand(type="text", id="b", content="b"))
+    dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row",
+            direction="horizontal",
+            children=("a", "b"),
+        )
+    )
+    dispatcher.dispatch(
+        LayoutCommand(
+            type="layout",
+            id="row",
+            direction="horizontal",
+            children=("a",),
+        )
+    )
+    ids = workspace.list_ids()
+    assert ids.count("a") == 1
+    assert ids.count("b") == 1
+    assert ids.count("row") == 1
+    assert set(ids) == {"a", "b", "row"}
+    assert workspace.get("a") is not None
+    assert workspace.get("b") is not None
+    assert workspace.parent_of["b"] is None
+    updated = dispatcher.dispatch(TextCommand(type="text", id="a", content="again"))
+    assert updated.ok is True
+    assert updated.action == "updated"
+    again = workspace.get("a")
+    assert isinstance(again, TextCommand)
+    assert again.content == "again"
 
 
 def test_layout_unknown_child_does_not_mutate() -> None:

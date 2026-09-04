@@ -91,17 +91,6 @@ class Workspace(QWidget):
     def get(self, command_id: str) -> Command | None:
         return self._commands.get(command_id)
 
-    def remove(self, command_id: str) -> bool:
-        block = self._blocks.pop(command_id, None)
-        if block is None:
-            return False
-        self._commands.pop(command_id, None)
-        self._parent_of.pop(command_id, None)
-        self._layout.removeWidget(block)
-        block.setParent(None)
-        block.deleteLater()
-        return True
-
     def list_ids(self) -> list[str]:
         return list(self._commands)
 

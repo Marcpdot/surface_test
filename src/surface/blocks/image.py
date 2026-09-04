@@ -75,11 +75,13 @@ class ImageBlock(Block):
     def _scaled(self, pixmap: QPixmap) -> QPixmap:
         if pixmap.isNull():
             return pixmap
-        width = self.width()
-        if width <= 0:
-            width = pixmap.width()
+        max_width = self.width()
+        if max_width <= 0:
+            max_width = pixmap.width()
+        if pixmap.width() <= max_width and pixmap.height() <= _MAX_HEIGHT:
+            return pixmap
         return pixmap.scaled(
-            max(1, width),
+            max(1, max_width),
             _MAX_HEIGHT,
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation,

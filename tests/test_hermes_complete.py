@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 
@@ -123,7 +124,74 @@ def test_ordinary_exercise_prompt_requires_stable_problem_id() -> None:
 def test_prompt_requires_bare_json() -> None:
     prompt = build_prompt("Vis F = ma")
     assert "Do not wrap the JSON in ``` or ```json fences." in prompt
+    assert "valid JSON parseable by Python json.loads" in prompt
+    assert "JSON-escape every backslash (write \\\\ for one backslash)" in prompt
+    assert "Encode every line break inside a string value as \\n" in prompt
+    assert "Do not emit raw control characters" in prompt
+    assert "Markdown is allowed inside content" in prompt
+    assert "Prefer Unicode mathematical symbols directly" in prompt
     assert prompt.strip().endswith("First character { or [.")
+
+
+def test_complete_preserves_long_json_escaped_solution_content() -> None:
+    content = (
+        "## Fullstendig løsning\n\n"
+        "Vi bruker likevekt og sammenhengen σ = My/I.\n\n"
+        "1. **Finn reaksjonskraften.** ΣFᵧ = 0 gir R = 12,5 kN.\n"
+        "2. **Finn momentet.** M = R·L/2 = 25 kN·m.\n"
+        "3. **Kontroller spenningen.** "
+        r"I LaTeX-form kan dette skrives som \sigma = \frac{My}{I}."
+        "\n\nDermed er maksimalspenningen 80 MPa ≤ 100 MPa, så kravet er oppfylt."
+    )
+    raw = json.dumps(
+        {
+            "commands": [
+                {"type": "text", "id": "solution-1", "content": content}
+            ]
+        },
+        ensure_ascii=False,
+    )
+    assert r"\n" in raw
+    assert r"\\sigma" in raw
+
+    commands = HermesBridge().complete(
+        "Vis hele løsningen", FakeTransport(output=raw)
+    )
+
+    assert commands == [
+        TextCommand(
+            type="text",
+            id="solution-1",
+            content=content,
+            format="markdown",
+        )
+    ]
+
+
+def test_complete_rejects_malformed_json_and_logs_decoder_details(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    raw = (
+        r'{"commands":[{"type":"text","id":"solution-1",'
+        r'"content":"Ugyldig LaTeX: \sigma = \frac{My}{I}"}]}'
+    )
+    with pytest.raises(json.JSONDecodeError) as decode_info:
+        json.loads(raw)
+
+    with caplog.at_level(logging.WARNING, logger="surface.hermes"):
+        with pytest.raises(ProtocolError) as protocol_info:
+            HermesBridge().complete("Vis hele løsningen", FakeTransport(output=raw))
+
+    decode_error = decode_info.value
+    protocol_error = protocol_info.value
+    assert protocol_error.code == "invalid_json"
+    assert protocol_error.__cause__ is not None
+    assert decode_error.msg in caplog.text
+    assert f"line {decode_error.lineno}" in caplog.text
+    assert f"column {decode_error.colno}" in caplog.text
+    assert f"character position {decode_error.pos}" in caplog.text
+    assert "raw Hermes stdout:" in caplog.text
+    assert raw in caplog.text
 
 
 def test_complete_fenced_json() -> None:

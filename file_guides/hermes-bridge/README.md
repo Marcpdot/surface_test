@@ -17,5 +17,9 @@ promptbyggeren. Parsing og transport er ellers uendret.
 v0.5: `complete` kan motta en separat study-context. Broen transporterer og parser
 fortsatt bare Surface-commands; study-policy og session-state eies ikke her.
 
+Ved `invalid_json` logger broen `JSONDecodeError`-melding, linje, kolonne og
+tegnposisjon før den eksisterende rå-stdout-diagnostikken. Output blir fortsatt
+avvist direkte; broen forsøker ingen JSON-reparasjon.
+
 **Naturlig videre utvikling**
 Når Hermes kobles på ekte kan transport, prompting og output-normalisering bygges her eller bak denne grensen uten å endre Surface-protokollen.

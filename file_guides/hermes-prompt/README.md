@@ -20,5 +20,10 @@ mode-spesifikk policy begrenser hint, feedback og neste steg; vanlig prompt er u
 Ved ordinær generering av en oppgave/problem/task krever protocol-kortet at hovedteksten
 bruker stabil id `problem-1`, slik at den kan bli study-target uten semantisk scanning.
 
+JSON-kontrakten sier eksplisitt at output må kunne parses med Python `json.loads`,
+at backslashes og linjeskift i strenger må JSON-escapes, og at rå kontrolltegn er
+forbudt. Markdown kan brukes i `content`; Unicode-matematikksymboler foretrekkes
+når de unngår usikre backslash-sekvenser.
+
 **Naturlig videre utvikling**
 Juster kortet når ekte Hermes-økter viser typiske feil; ikke utvid command-skjemaet for modellens skyld.

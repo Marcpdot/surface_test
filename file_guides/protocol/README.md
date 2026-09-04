@@ -15,5 +15,9 @@ v0.4: `move` og `remove` er eksplisitte workspace-operasjoner. `move.parent` bru
 layout-id eller `null` for root, og valgfri `index` angir nullbasert plassering.
 Operasjonene er strengt feltvaliderte på samme måte som node-upserts.
 
+v0.5: Ugyldig JSON forblir en streng `invalid_json`-feil fra `json.loads`.
+Feilmeldingen tar med decoder-melding, linje, kolonne og tegnposisjon slik at
+serialiseringsfeil kan diagnostiseres uten reparasjon eller permissiv parsing.
+
 **Naturlig videre utvikling**
 Utforsk type systems, grammars, algebraic data types, schemas og compositional interfaces før protocolen eventuelt generaliseres.

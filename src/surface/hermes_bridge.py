@@ -81,6 +81,17 @@ class HermesBridge:
                 )
             return self.from_hermes_output(unwrapped)
         except ProtocolError as exc:
+            decode_error = exc.__cause__
+            if exc.code == "invalid_json" and isinstance(
+                decode_error, json.JSONDecodeError
+            ):
+                _LOG.warning(
+                    "invalid_json: %s (line %d, column %d, character position %d)",
+                    decode_error.msg,
+                    decode_error.lineno,
+                    decode_error.colno,
+                    decode_error.pos,
+                )
             _LOG.warning("%s: raw Hermes stdout:\n%s", exc.code, raw)
             if exc.code != "cannot_translate":
                 raise

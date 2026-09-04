@@ -426,6 +426,11 @@ def test_10000_points_ok() -> None:
 def test_invalid_json() -> None:
     error = _error("{")
     assert error.code == "invalid_json"
+    assert error.message == (
+        "invalid JSON: Expecting property name enclosed in double quotes "
+        "(line 1, column 2, character position 1)"
+    )
+    assert isinstance(error.__cause__, json.JSONDecodeError)
     error = _error(b"\xff\xfe not utf-8")
     assert error.code == "invalid_json"
 

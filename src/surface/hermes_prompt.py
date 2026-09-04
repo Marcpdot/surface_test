@@ -6,10 +6,16 @@ PROTOCOL_CARD = """\
 You output Surface commands as JSON only. No Qt. No widget instructions.
 
 Reply with one JSON value and nothing else.
-Do not write markdown. Do not wrap the JSON in ``` or ```json fences.
+Do not wrap the JSON in ``` or ```json fences.
 Do not write any explanation before or after the JSON.
 The first non-whitespace character must be { or [.
 The last non-whitespace character must be } or ].
+The output must be valid JSON parseable by Python json.loads.
+Inside JSON string values, JSON-escape every backslash (write \\\\ for one backslash).
+Encode every line break inside a string value as \\n; never put a literal newline inside a JSON string.
+Do not emit raw control characters inside JSON strings.
+Markdown is allowed inside content, but the containing JSON must remain valid.
+Prefer Unicode mathematical symbols directly when practical instead of unsafe backslash sequences.
 
 Allowed types: text, equation, image, plot, layout, move, remove.
 Emit either a JSON array of command objects, or {"commands": [ ... ]}.

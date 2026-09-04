@@ -164,7 +164,14 @@ def _loads(payload: str | bytes | dict[str, Any] | list[Any] | Any) -> Any:
         try:
             return json.loads(payload)
         except json.JSONDecodeError as exc:
-            raise ProtocolError("invalid_json", "invalid JSON") from exc
+            raise ProtocolError(
+                "invalid_json",
+                (
+                    f"invalid JSON: {exc.msg} "
+                    f"(line {exc.lineno}, column {exc.colno}, "
+                    f"character position {exc.pos})"
+                ),
+            ) from exc
     return payload
 
 

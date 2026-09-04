@@ -20,3 +20,5 @@ Qt eller ekte modellkall og hindrer at all kontroll skjules i fri prompttekst.
 
 **Avgrensning**  
 Ingen mastery-modell, historisk minne, task-ingestion eller pedagogisk planner.
+Eksplisitt negerte løsningsfraser fjernes før solution-intent vurderes, slik at vanlige
+opprettingsrequests som «lag en oppgave, men ikke løs den» går til ordinær Hermes-flow.

@@ -58,6 +58,18 @@ _VARIANT = re.compile(
 _VAGUE_SOLUTION = re.compile(
     r"\b(løs(?:ning|e)?|fasit|solve|solution|answer)\b", re.IGNORECASE
 )
+_NEGATED_SOLUTION = re.compile(
+    r"\b(?:"
+    r"ikke\s+(?:løs(?:e)?(?:\s+(?:oppgaven|problemet|den))?|"
+    r"vis(?:e)?\s+(?:hele\s+)?(?:løsningen|fasit(?:en)?))|"
+    r"uten\s+(?:(?:å\s+)?løs(?:e)?(?:\s+(?:oppgaven|problemet))?|(?:en\s+)?løsning)|"
+    r"(?:do\s+not|don['’]t)\s+(?:solve(?:\s+(?:it|the\s+problem|the\s+task))?|"
+    r"(?:show|reveal)\s+(?:the\s+)?(?:solution|answer))|"
+    r"without\s+(?:solving(?:\s+(?:it|the\s+problem|the\s+task))?|"
+    r"(?:(?:a|the)\s+)?solution)"
+    r")\b",
+    re.IGNORECASE,
+)
 _WORKSPACE_ACTION = re.compile(
     r"\b(flytt|fjern|slett|oppdater|move|remove|delete|update|reorder)\b",
     re.IGNORECASE,
@@ -257,6 +269,7 @@ class StudySession:
         )
 
     def _classify(self, text: str) -> StudyMode | None:
+        solution_text = _NEGATED_SOLUTION.sub(" ", text)
         explicit: set[StudyMode] = set()
         if _HINT.search(text):
             explicit.add("hint_only")
@@ -264,7 +277,7 @@ class StudySession:
             explicit.add("next_step")
         if _CHECK.search(text):
             explicit.add("check_attempt")
-        if _SOLUTION.search(text):
+        if _SOLUTION.search(solution_text):
             explicit.add("show_solution")
         if _VARIANT.search(text):
             explicit.add("new_variant")
@@ -281,7 +294,7 @@ class StudySession:
             return "hint_only"
         if self._state.target_id is not None and _ATTEMPT_VALUE.search(text):
             return "check_attempt"
-        if _VAGUE_SOLUTION.search(text):
+        if _VAGUE_SOLUTION.search(solution_text):
             raise StudyError(
                 "ambiguous_study_request",
                 "say explicitly whether you want a hint, one next step, or the full solution",

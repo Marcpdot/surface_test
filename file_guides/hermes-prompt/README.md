@@ -17,6 +17,8 @@ workspace-snapshot. Snapshotet inneholder ingen block-content, filstier eller Qt
 v0.5: `build_prompt` kan i tillegg få en liten study-context med valgt problem,
 interaction-mode, relevant tidligere respons og eksakt tillatt response-slot. En
 mode-spesifikk policy begrenser hint, feedback og neste steg; vanlig prompt er uendret.
+Ved ordinær generering av en oppgave/problem/task krever protocol-kortet at hovedteksten
+bruker stabil id `problem-1`, slik at den kan bli study-target uten semantisk scanning.
 
 **Naturlig videre utvikling**
 Juster kortet når ekte Hermes-økter viser typiske feil; ikke utvid command-skjemaet for modellens skyld.

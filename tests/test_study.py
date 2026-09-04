@@ -95,6 +95,31 @@ def test_ambiguous_and_vague_solution_requests_are_rejected() -> None:
         assert exc_info.value.code == "ambiguous_study_request"
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Ikke løs oppgaven",
+        "Lag en mekanikkoppgave uten løsning",
+        "Ikke vis fasit",
+        "Create a mechanics problem, but don't solve it",
+        "Do not solve it",
+        "Create an exercise, but do not show the solution",
+    ],
+)
+def test_negated_solution_language_is_not_study_intent(text: str) -> None:
+    assert StudySession().prepare(text, _workspace()) is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Vis løsning", "Show solution", "Kan du løse den?"],
+)
+def test_positive_vague_solution_language_stays_guarded(text: str) -> None:
+    with pytest.raises(StudyError) as exc_info:
+        StudySession().prepare(text, _workspace())
+    assert exc_info.value.code == "ambiguous_study_request"
+
+
 def test_continue_requires_active_session_then_routes_to_next_step() -> None:
     session = StudySession()
     workspace = _workspace(_problem())
@@ -348,3 +373,21 @@ def test_fake_hermes_multi_round_study_loop() -> None:
     session.commit(solution_turn)
     assert session.state.solution_revealed is True
     assert workspace.get("solution-1") is not None
+
+
+def test_ordinary_generated_exercise_becomes_stable_study_target() -> None:
+    request = "Create a mechanics problem for me, but do not solve the problem."
+    assert StudySession().prepare(request, _workspace()) is None
+    transport = FakeTransport(
+        output=(
+            '{"type":"text","id":"problem-1",'
+            '"content":"A 10 kg mass rests on a 30 degree incline. Find the force."}'
+        )
+    )
+    commands = HermesBridge().complete(request, transport, {"nodes": []})
+    assert "use id problem-1 for the primary text block" in transport.prompts[0]
+
+    workspace = _workspace(*commands)
+    turn = StudySession().prepare("Gi meg bare ett hint til denne oppgaven", workspace)
+    assert turn is not None
+    assert turn.target_id == "problem-1"

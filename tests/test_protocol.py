@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from surface.hermes_bridge import HermesBridge
 from surface.image_source import interpret_image_source, resolve_image_file
 from surface.protocol import (
+    CommandType,
     MAX_CHILDREN,
     EquationCommand,
     ImageCommand,
@@ -704,6 +706,18 @@ def test_remove_command() -> None:
 def test_invalid_move_fields(payload: dict[str, object]) -> None:
     with pytest.raises(ProtocolError):
         parse_command(payload)
+
+
+def test_v05_adds_no_protocol_command_types() -> None:
+    assert set(get_args(CommandType)) == {
+        "text",
+        "equation",
+        "image",
+        "plot",
+        "layout",
+        "move",
+        "remove",
+    }
 
 
 def test_workspace_operations_reject_unknown_fields() -> None:

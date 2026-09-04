@@ -110,6 +110,16 @@ def test_ordinary_prompt_has_no_study_policy() -> None:
     assert "Study policy" not in prompt
 
 
+def test_ordinary_exercise_prompt_requires_stable_problem_id() -> None:
+    prompt = build_prompt(
+        "Create a mechanics exercise, but do not show the solution.", {"nodes": []}
+    )
+    assert (
+        "When creating an exercise, problem, or task for the user to work on, "
+        "use id problem-1 for the primary text block"
+    ) in prompt
+
+
 def test_prompt_requires_bare_json() -> None:
     prompt = build_prompt("Vis F = ma")
     assert "Do not wrap the JSON in ``` or ```json fences." in prompt

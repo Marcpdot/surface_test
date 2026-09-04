@@ -25,6 +25,7 @@ remove: type, id (an existing node). Removing a layout preserves its direct chil
 
 For updates, move, and remove, use ids from Current workspace. Do not invent an id for an existing node.
 Primitive upserts update content without changing placement.
+When creating an exercise, problem, or task for the user to work on, use id problem-1 for the primary text block containing the problem statement.
 
 ids: [A-Za-z0-9][A-Za-z0-9._-]{0,63}
 
